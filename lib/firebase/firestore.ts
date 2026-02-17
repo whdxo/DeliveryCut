@@ -12,6 +12,7 @@ import {
   limit,
   Timestamp,
 } from "firebase/firestore"
+import type { StoredMenuPlan } from "@/lib/types/api"
 import { db } from "./config"
 
 /**
@@ -52,9 +53,8 @@ export const getDocument = async (collectionName: string, docId: string) => {
 
     if (docSnap.exists()) {
       return { data: { id: docSnap.id, ...docSnap.data() }, error: null }
-    } else {
-      return { data: null, error: "Document not found" }
     }
+    return { data: null, error: "Document not found" }
   } catch (error: any) {
     return { data: null, error: error.message }
   }
@@ -100,9 +100,9 @@ export const deleteDocument = async (
 export const getDocuments = async (collectionName: string) => {
   try {
     const querySnapshot = await getDocs(collection(db, collectionName))
-    const documents = querySnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
+    const documents = querySnapshot.docs.map((docItem) => ({
+      id: docItem.id,
+      ...docItem.data(),
     }))
     return { data: documents, error: null }
   } catch (error: any) {
@@ -111,7 +111,37 @@ export const getDocuments = async (collectionName: string) => {
 }
 
 /**
- * 사용자별 메뉴 플랜 저장
+ * FS1/FS2 공용 저장 규약: menuPlans/{resultId}
+ */
+export const saveGeneratedPlan = async (plan: StoredMenuPlan) => {
+  try {
+    await setDoc(doc(db, collections.menuPlans, plan.resultId), plan)
+    return { id: plan.resultId, error: null }
+  } catch (error: any) {
+    return { id: null, error: error.message }
+  }
+}
+
+/**
+ * resultId로 저장된 결과 조회
+ */
+export const getGeneratedPlanById = async (resultId: string) => {
+  try {
+    const docRef = doc(db, collections.menuPlans, resultId)
+    const docSnap = await getDoc(docRef)
+
+    if (!docSnap.exists()) {
+      return { data: null, error: "Document not found" }
+    }
+
+    return { data: docSnap.data() as StoredMenuPlan, error: null }
+  } catch (error: any) {
+    return { data: null, error: error.message }
+  }
+}
+
+/**
+ * 사용자별 메뉴 플랜 저장 (legacy)
  */
 export const saveMenuPlan = async (userId: string, menuPlan: any) => {
   try {
@@ -140,9 +170,9 @@ export const getUserMenuPlans = async (userId: string) => {
       limit(10)
     )
     const querySnapshot = await getDocs(q)
-    const menuPlans = querySnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
+    const menuPlans = querySnapshot.docs.map((docItem) => ({
+      id: docItem.id,
+      ...docItem.data(),
     }))
     return { data: menuPlans, error: null }
   } catch (error: any) {

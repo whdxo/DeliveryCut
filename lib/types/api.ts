@@ -69,6 +69,7 @@ export interface MenuPlanMeta {
 
 export interface StoredMenuPlan {
   resultId: string
+  userId?: string | null
   input: GenerateInput
   output: GenerateOutput
   meta: MenuPlanMeta
