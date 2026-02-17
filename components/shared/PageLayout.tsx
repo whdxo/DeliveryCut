@@ -1,10 +1,12 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { useEffect, useState, type ReactNode } from "react"
+import { usePathname, useRouter } from "next/navigation"
+import { logOut, onAuthChange } from "@/lib/firebase"
 
 // 3-column desktop layout: side | center(960px) | side
-export function DesktopLayout({ children }: { children: React.ReactNode }) {
+export function DesktopLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex w-full min-h-screen">
       <div className="flex-1 bg-dc-side border-r border-dc-border hidden lg:block" />
@@ -22,13 +24,28 @@ interface NavBarProps {
 
 export function NavBar({ variant = "app" }: NavBarProps) {
   const pathname = usePathname()
+  const router = useRouter()
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+
+  useEffect(() => {
+    const unsubscribe = onAuthChange((user) => {
+      setIsLoggedIn(Boolean(user))
+    })
+
+    return () => unsubscribe()
+  }, [])
+
+  const handleLogout = async () => {
+    const { error } = await logOut()
+    if (!error) {
+      router.push("/")
+    }
+  }
 
   return (
     <div className="w-full bg-dc-surface flex">
-      {/* left side panel - desktop only */}
       <div className="flex-1 bg-dc-side border-r border-dc-border hidden lg:block h-16" />
 
-      {/* center nav */}
       <div className="w-full lg:w-[960px] lg:flex-none h-16 flex items-center justify-between px-5 lg:px-10 bg-dc-surface">
         <Link href="/" className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-[7px] bg-dc-primary flex items-center justify-center">
@@ -39,14 +56,24 @@ export function NavBar({ variant = "app" }: NavBarProps) {
 
         {variant === "landing" ? (
           <div className="flex items-center gap-2">
+            {isLoggedIn ? (
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="h-9 px-5 rounded-full bg-dc-muted text-dc-text text-[13px] font-semibold flex items-center justify-center hover:bg-dc-border transition-colors"
+              >
+                로그아웃
+              </button>
+            ) : (
+              <Link
+                href="/login"
+                className="h-9 px-5 rounded-full bg-dc-muted text-dc-text text-[13px] font-semibold flex items-center justify-center hover:bg-dc-border transition-colors"
+              >
+                로그인
+              </Link>
+            )}
             <Link
-              href="/login"
-              className="h-9 px-5 rounded-full bg-dc-muted text-dc-text text-[13px] font-semibold flex items-center justify-center hover:bg-dc-border transition-colors"
-            >
-              로그인
-            </Link>
-            <Link
-              href="/login"
+              href={isLoggedIn ? "/home" : "/login"}
               className="h-9 px-5 rounded-full bg-dc-primary text-white text-[13px] font-semibold flex items-center justify-center hover:bg-[#2d6b45] transition-colors"
             >
               무료로 시작하기
@@ -70,17 +97,31 @@ export function NavBar({ variant = "app" }: NavBarProps) {
             >
               히스토리
             </Link>
+            {isLoggedIn ? (
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="h-9 px-4 rounded-full bg-dc-muted text-dc-text text-[13px] font-semibold hover:bg-dc-border transition-colors"
+              >
+                로그아웃
+              </button>
+            ) : (
+              <Link
+                href="/login"
+                className="h-9 px-4 rounded-full bg-dc-primary text-white text-[13px] font-semibold flex items-center justify-center hover:bg-[#2d6b45] transition-colors"
+              >
+                로그인
+              </Link>
+            )}
           </div>
         )}
       </div>
 
-      {/* right side panel - desktop only */}
       <div className="flex-1 bg-dc-side border-l border-dc-border hidden lg:block h-16" />
     </div>
   )
 }
 
-// Mobile bottom nav
 export function MobileBottomNav() {
   const pathname = usePathname()
 
