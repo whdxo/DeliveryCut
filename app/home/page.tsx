@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
@@ -7,9 +7,14 @@ import LoginPromptModal from "@/components/shared/LoginPromptModal"
 import { onAuthChange } from "@/lib/firebase"
 import type { ApiError, GenerateInput, GenerateResponse, ResultResponse, Tool } from "@/lib/types/api"
 
+/**
+ * ─────────────────────────────────────────────────────────────────────────────
+ * 상수 / 타입
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
 const TIME_OPTIONS = ["5분", "10분", "15분"]
 const TOOL_OPTIONS = ["전자레인지", "팬", "에어프라이어"]
-const INGREDIENT_TAGS = ["계란", "두부", "김치"]
+const INGREDIENT_TAGS = ["계란", "두부", "김치", "양파", "참치", "스팸", "대파"]
 
 const TIPS = [
   {
@@ -130,11 +135,10 @@ export default function HomePage() {
                     <button
                       key={t}
                       onClick={() => setSelectedTime(t)}
-                      className={`flex-1 h-10 rounded-lg text-[13px] font-medium transition-colors ${
-                        selectedTime === t
+                      className={`flex-1 h-10 rounded-lg text-[13px] font-medium transition-colors ${selectedTime === t
                           ? "bg-dc-primary text-white font-semibold"
                           : "bg-dc-muted text-dc-text-secondary hover:bg-dc-border"
-                      }`}
+                        }`}
                     >
                       {t}
                     </button>
@@ -149,11 +153,10 @@ export default function HomePage() {
                     <button
                       key={tool}
                       onClick={() => toggleTool(tool)}
-                      className={`h-9 px-4 rounded-full text-[13px] font-medium transition-colors ${
-                        selectedTools.includes(tool)
+                      className={`h-9 px-4 rounded-full text-[13px] font-medium transition-colors ${selectedTools.includes(tool)
                           ? "bg-dc-primary text-white"
                           : "bg-dc-muted text-dc-text-secondary hover:bg-dc-border"
-                      }`}
+                        }`}
                     >
                       {tool}
                     </button>

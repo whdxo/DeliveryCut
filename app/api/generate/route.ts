@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { generateMenu } from "@/lib/ai/generateMenu"
 import { validateGenerateInput, validateGenerateOutput } from "@/lib/ai/schema"
 import type { ApiError, GenerateResponse } from "@/lib/types/api"
+// 🔗 팀원 작업 완료 후 아래 주석 해제
+// import { saveResult } from "@/lib/firebase/results"
 
 const jsonError = (status: number, code: string, message: string, details?: unknown) => {
   const body: ApiError = { error: { code, message, details } }
@@ -35,10 +37,20 @@ export async function POST(request: Request) {
       )
     }
 
+    const resultId = crypto.randomUUID()
+
     const response: GenerateResponse = {
-      resultId: crypto.randomUUID(),
+      resultId,
       output: outputValidation.data,
     }
+
+    // 🔗 팀원 작업 완료 후 아래 주석 해제
+    // await saveResult(resultId, {
+    //   input: inputValidation.data,
+    //   output: outputValidation.data,
+    //   createdAt: new Date().toISOString(),
+    //   userId: null,
+    // })
 
     return NextResponse.json(response)
   } catch (error) {

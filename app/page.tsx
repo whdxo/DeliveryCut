@@ -1,3 +1,4 @@
+
 import Link from "next/link"
 import { NavBar } from "@/components/shared/PageLayout"
 
@@ -86,13 +87,11 @@ export default function LandingPage() {
                     ].map((item, i) => (
                       <div
                         key={i}
-                        className={`flex items-center gap-3 p-3 rounded-xl ${
-                          i === 0 ? "bg-dc-primary-light" : "bg-dc-muted"
-                        }`}
+                        className={`flex items-center gap-3 p-3 rounded-xl ${i === 0 ? "bg-dc-primary-light" : "bg-dc-muted"
+                          }`}
                       >
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${
-                          i === 0 ? "bg-dc-primary" : "bg-dc-border"
-                        }`}>
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${i === 0 ? "bg-dc-primary" : "bg-dc-border"
+                          }`}>
                           {["🍳", "🍲", "🍝"][i]}
                         </div>
                         <div className="flex-1">
