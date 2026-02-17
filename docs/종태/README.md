@@ -1,5 +1,15 @@
 # 종태 작업 공간
 
+## 👨‍💼 역할
+
+- **주 담당**: AI/Prompt Engineer
+- **직책**: 팀장 (Team Leader)
+- **서포트**: Fullstack Developer (Frontend + Backend 모두 가능), 디자인 서포트
+
+💡 **상세 내역**: [역할-및-책임.md](./역할-및-책임.md) 참고
+
+---
+
 ## 🔗 내 브랜치 정보
 
 - **브랜치명**: `jongtae/#1`
