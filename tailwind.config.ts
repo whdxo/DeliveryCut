@@ -44,13 +44,18 @@ const config: Config = {
           DEFAULT: "hsl(var(--accent))",
           foreground: "hsl(var(--accent-foreground))",
         },
-        popover: {
-          DEFAULT: "hsl(var(--popover))",
-          foreground: "hsl(var(--popover-foreground))",
-        },
-        card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
+        // DeliveryCut design tokens
+        dc: {
+          primary: "#3D8A5A",
+          "primary-light": "#C8F0D8",
+          bg: "#FAF9F6",
+          surface: "#FFFFFF",
+          muted: "#F0EEE9",
+          side: "#EDECEA",
+          border: "#D1D0CD",
+          text: "#1A1918",
+          "text-secondary": "#6D6C6A",
+          "text-muted": "#9C9B99",
         },
       },
       borderRadius: {
@@ -71,6 +76,9 @@ const config: Config = {
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+      },
+      maxWidth: {
+        "content": "960px",
       },
     },
   },
