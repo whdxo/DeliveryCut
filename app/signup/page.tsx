@@ -3,9 +3,9 @@
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { onAuthChange, signIn, signInWithGoogle } from "@/lib/firebase"
+import { onAuthChange, signInWithGoogle, signUp } from "@/lib/firebase"
 
-export default function LoginPage() {
+export default function SignUpPage() {
   const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
   const [email, setEmail] = useState("")
@@ -23,16 +23,16 @@ export default function LoginPage() {
     return () => unsubscribe()
   }, [router])
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
 
     setIsLoading(true)
     setError(null)
 
-    const { user, error: authError } = await signIn(email.trim(), password)
+    const { user, error: authError } = await signUp(email.trim(), password)
 
     if (authError || !user) {
-      setError(authError || "로그인에 실패했습니다.")
+      setError(authError || "회원가입에 실패했습니다.")
       setIsLoading(false)
       return
     }
@@ -40,7 +40,7 @@ export default function LoginPage() {
     router.replace("/home")
   }
 
-  const handleGoogleLogin = async () => {
+  const handleGoogleSignUp = async () => {
     setIsLoading(true)
     setError(null)
 
@@ -77,11 +77,11 @@ export default function LoginPage() {
         <div className="w-full lg:w-[960px] lg:flex-none flex items-center justify-center px-5 py-12 lg:py-0">
           <div className="w-full max-w-[480px] bg-dc-surface rounded-2xl border border-dc-border p-8 lg:p-12 flex flex-col gap-6 lg:gap-8">
             <div className="flex flex-col items-center gap-1.5 text-center">
-              <h1 className="text-dc-text text-2xl lg:text-[24px] font-bold">로그인</h1>
-              <p className="text-dc-text-secondary text-sm">이메일 또는 구글로 계속하기</p>
+              <h1 className="text-dc-text text-2xl lg:text-[24px] font-bold">회원가입</h1>
+              <p className="text-dc-text-secondary text-sm">이메일 또는 구글로 시작하기</p>
             </div>
 
-            <form onSubmit={handleLogin} className="flex flex-col gap-4">
+            <form onSubmit={handleSignUp} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
                 <label className="text-dc-text text-[13px] font-semibold">이메일</label>
                 <input
@@ -101,8 +101,9 @@ export default function LoginPage() {
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="비밀번호 입력"
+                    placeholder="6자 이상 비밀번호"
                     className="w-full h-12 px-4 pr-16 bg-dc-muted border border-dc-border rounded-[10px] text-dc-text text-sm placeholder:text-dc-text-muted focus:outline-none focus:border-dc-primary focus:bg-white transition-colors"
+                    minLength={6}
                     required
                   />
                   <button
@@ -120,7 +121,7 @@ export default function LoginPage() {
                 disabled={isLoading}
                 className="w-full h-[52px] bg-dc-primary text-white text-base font-bold rounded-xl hover:bg-[#2d6b45] transition-colors flex items-center justify-center disabled:opacity-50"
               >
-                {isLoading ? "처리 중..." : "로그인"}
+                {isLoading ? "처리 중..." : "회원가입"}
               </button>
             </form>
 
@@ -132,11 +133,11 @@ export default function LoginPage() {
 
             <button
               type="button"
-              onClick={handleGoogleLogin}
+              onClick={handleGoogleSignUp}
               disabled={isLoading}
               className="w-full h-[52px] bg-white text-dc-text text-[15px] font-semibold rounded-xl border border-dc-border hover:bg-dc-muted transition-colors disabled:opacity-50"
             >
-              Google로 로그인
+              Google로 계속하기
             </button>
 
             {error ? (
@@ -146,9 +147,9 @@ export default function LoginPage() {
             ) : null}
 
             <div className="flex items-center justify-center gap-1">
-              <span className="text-dc-text-secondary text-sm">아직 계정이 없으신가요?</span>
-              <Link href="/signup" className="text-dc-primary text-sm font-semibold hover:underline">
-                회원가입
+              <span className="text-dc-text-secondary text-sm">이미 계정이 있으신가요?</span>
+              <Link href="/login" className="text-dc-primary text-sm font-semibold hover:underline">
+                로그인
               </Link>
             </div>
           </div>

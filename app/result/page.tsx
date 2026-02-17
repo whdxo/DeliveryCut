@@ -1,10 +1,19 @@
 "use client"
 
-import { useState, Suspense } from "react"
+import { useState, Suspense, useMemo, useEffect } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { NavBar, MobileBottomNav } from "@/components/shared/PageLayout"
+import type { MenuOption, ResultResponse, Tool } from "@/lib/types/api"
 
-// Mock data — will be replaced with AI API
+const cacheKey = (resultId: string) => `deliverycut:result:${resultId}`
+
+const toolLabel: Record<Tool, string> = {
+  microwave: "전자레인지",
+  pan: "팬",
+  airfryer: "에어프라이어",
+}
+
 const MOCK_MENUS = [
   { id: 0, name: "계란 볶음밥", tags: ["5분", "팬 하나", "1인분"], selected: true },
   { id: 1, name: "두부 된장찌개", tags: ["10분", "냄비"], selected: false },
@@ -23,29 +32,85 @@ const MOCK_RECIPE = {
 }
 
 const MOCK_MEAL_PLAN = [
-  { day: "월요일", meals: ["계란 볶음밥", "두부찌개", "참치 볶음 스크램블", "두부 정도", "채소 볶음"] },
-  { day: "화요일", meals: ["참치 볶음밥", "콩나물 볶음이", "계란 스크램블도 무방", "스프라이더 계란", "채소 볶음"] },
-  { day: "수요일", meals: ["콩 두부 스크랄빈", "계란 볶음 이상", "이상기도 가능"] },
+  { day: "월요일", meals: ["계란 볶음밥", "두부찌개", "참치 볶음 스크램블"] },
+  { day: "화요일", meals: ["참치 볶음밥", "콩나물 볶음", "계란 스크램블"] },
+  { day: "수요일", meals: ["두부 스크램블", "계란볶음", "채소볶음"] },
 ]
 
 const MOCK_SHOPPING = [
   { name: "계란", amount: "4개" },
   { name: "두부", amount: "반모" },
   { name: "참기름", amount: "적당량" },
-  { name: "달걀노른자", amount: "200g" },
   { name: "된장", amount: "적당" },
-  { name: "대파", amount: "약간" },
 ]
 
 function ResultContent() {
-  const [selectedMenu, setSelectedMenu] = useState(0)
+  const searchParams = useSearchParams()
+  const resultId = searchParams.get("resultId")
+
   const [activeTab, setActiveTab] = useState<"recipe" | "plan">("recipe")
+  const [selectedMenu, setSelectedMenu] = useState(0)
+  const [result, setResult] = useState<ResultResponse | null>(null)
+
+  useEffect(() => {
+    if (!resultId) return
+
+    const raw = sessionStorage.getItem(cacheKey(resultId))
+    if (!raw) return
+
+    try {
+      const parsed = JSON.parse(raw) as ResultResponse
+      setResult(parsed)
+    } catch {
+      setResult(null)
+    }
+  }, [resultId])
+
+  const menus = useMemo(() => {
+    if (!result) return MOCK_MENUS
+
+    return result.output.menuOptions.map((menu, idx) => ({
+      id: idx,
+      name: menu.title,
+      tags: [
+        `${menu.timeMin}분`,
+        ...menu.tools.map((tool) => toolLabel[tool]),
+        "1인분",
+      ],
+      selected: idx === selectedMenu,
+    }))
+  }, [result, selectedMenu])
+
+  const selectedData: MenuOption | null = useMemo(() => {
+    if (!result) return null
+    return result.output.menuOptions[selectedMenu] || null
+  }, [result, selectedMenu])
+
+  const recipe = selectedData
+    ? {
+        name: selectedData.title,
+        ingredients: selectedData.ingredients,
+        steps: selectedData.steps,
+      }
+    : MOCK_RECIPE
+
+  const mealPlan = result
+    ? result.output.threeDayPlan.map((item) => ({
+        day: `Day ${item.day}`,
+        meals: [item.breakfast, item.lunch, item.dinner],
+      }))
+    : MOCK_MEAL_PLAN
+
+  const shopping = result
+    ? result.output.shoppingList.map((item) => ({
+        name: item.item,
+        amount: `${item.quantity}${item.unit}`,
+      }))
+    : MOCK_SHOPPING
 
   return (
     <div className="min-h-screen bg-dc-bg">
-      {/* NavBar */}
       <div className="sticky top-0 z-50 w-full border-b border-dc-border bg-dc-surface">
-        {/* Mobile back nav */}
         <div className="lg:hidden flex items-center justify-between h-14 px-5 bg-dc-surface">
           <div className="flex items-center gap-2">
             <Link
@@ -63,39 +128,30 @@ function ResultContent() {
             다시 만들기
           </Link>
         </div>
-        {/* Desktop nav */}
         <div className="hidden lg:block">
           <NavBar variant="app" />
         </div>
       </div>
 
-      {/* Body */}
       <div className="flex w-full">
         <div className="flex-1 bg-dc-side border-r border-dc-border hidden lg:block" />
 
         <div className="w-full lg:w-[960px] lg:flex-none px-5 lg:px-10 py-6 lg:py-12 flex flex-col gap-6 lg:gap-8 pb-24 lg:pb-12">
-
-          {/* Page header - desktop only */}
           <div className="hidden lg:flex flex-col gap-1">
             <h1 className="text-dc-text text-[28px] font-bold">오늘의 추천 메뉴</h1>
-            <p className="text-dc-text-secondary text-sm">
-              메뉴를 선택하면 레시피와 장보기 목록을 볼 수 있어요
-            </p>
+            <p className="text-dc-text-secondary text-sm">메뉴를 선택하면 레시피와 장보기 목록을 볼 수 있어요</p>
           </div>
 
-          {/* Mobile: Page header */}
           <div className="lg:hidden flex flex-col gap-1">
             <h1 className="text-dc-text text-xl font-bold">오늘의 추천 메뉴</h1>
             <p className="text-dc-text-secondary text-xs">메뉴를 선택하면 레시피를 볼 수 있어요</p>
           </div>
 
-          {/* Menu Selection */}
           <div className="flex flex-col gap-3">
             <div className="text-dc-text text-sm lg:text-base font-semibold">📋 메뉴 선택</div>
 
-            {/* Desktop: 3-col grid */}
             <div className="hidden lg:grid grid-cols-3 gap-4">
-              {MOCK_MENUS.map((menu) => (
+              {menus.map((menu) => (
                 <button
                   key={menu.id}
                   onClick={() => setSelectedMenu(menu.id)}
@@ -122,9 +178,8 @@ function ResultContent() {
               ))}
             </div>
 
-            {/* Mobile: list */}
             <div className="lg:hidden flex flex-col gap-2">
-              {MOCK_MENUS.map((menu) => (
+              {menus.map((menu) => (
                 <button
                   key={menu.id}
                   onClick={() => setSelectedMenu(menu.id)}
@@ -144,14 +199,10 @@ function ResultContent() {
             </div>
           </div>
 
-          {/* Main Content: Recipe + Shopping */}
           <div className="flex flex-col lg:flex-row gap-6">
-            {/* Left: Recipe */}
             <div className="flex-1 bg-dc-surface rounded-2xl border border-dc-border p-5 lg:p-6 flex flex-col gap-4">
               <div className="flex items-center gap-3 flex-wrap">
-                <h2 className="text-dc-text text-base lg:text-lg font-bold">
-                  🍳 {MOCK_RECIPE.name} — 레시피
-                </h2>
+                <h2 className="text-dc-text text-base lg:text-lg font-bold">🍳 {recipe.name} — 레시피</h2>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setActiveTab("recipe")}
@@ -174,11 +225,10 @@ function ResultContent() {
 
               {activeTab === "recipe" && (
                 <>
-                  {/* Ingredients */}
                   <div className="flex flex-col gap-2">
                     <div className="text-dc-text text-sm font-semibold">재료</div>
                     <div className="flex flex-col gap-1.5">
-                      {MOCK_RECIPE.ingredients.map((ing, i) => (
+                      {recipe.ingredients.map((ing, i) => (
                         <div key={i} className="flex items-center gap-2 text-dc-text-secondary text-sm">
                           <span className="text-dc-primary">✦</span>
                           {ing}
@@ -189,11 +239,10 @@ function ResultContent() {
 
                   <div className="h-px bg-dc-border" />
 
-                  {/* Steps */}
                   <div className="flex flex-col gap-2">
                     <div className="text-dc-text text-sm font-semibold">조리 순서</div>
                     <ol className="flex flex-col gap-2">
-                      {MOCK_RECIPE.steps.map((step, i) => (
+                      {recipe.steps.map((step, i) => (
                         <li key={i} className="flex gap-3 text-sm">
                           <span className="w-5 h-5 rounded-full bg-dc-primary text-white text-[11px] font-bold flex items-center justify-center flex-none mt-0.5">
                             {i + 1}
@@ -208,7 +257,7 @@ function ResultContent() {
 
               {activeTab === "plan" && (
                 <div className="flex flex-col gap-3">
-                  {MOCK_MEAL_PLAN.map((day, i) => (
+                  {mealPlan.map((day, i) => (
                     <div key={i} className="flex flex-col gap-1">
                       <div className="text-dc-text text-xs font-semibold">{day.day}</div>
                       <div className="text-dc-text-secondary text-xs leading-relaxed">
@@ -220,16 +269,13 @@ function ResultContent() {
               )}
             </div>
 
-            {/* Right: Shopping List */}
             <div className="lg:w-[280px] lg:flex-none bg-dc-surface rounded-2xl border border-dc-border p-5 lg:p-6 flex flex-col gap-4">
               <div className="flex items-center gap-2">
                 <h2 className="text-dc-text text-base font-bold">🛒 장보기 목록</h2>
-                <span className="text-[10px] font-semibold text-dc-primary bg-dc-primary-light px-2 py-0.5 rounded-full">
-                  AI 추천
-                </span>
+                <span className="text-[10px] font-semibold text-dc-primary bg-dc-primary-light px-2 py-0.5 rounded-full">AI 추천</span>
               </div>
               <div className="flex flex-col gap-2">
-                {MOCK_SHOPPING.map((item, i) => (
+                {shopping.map((item, i) => (
                   <div key={i} className="flex items-center justify-between">
                     <span className="text-dc-text text-sm">{item.name}</span>
                     <span className="text-dc-text-secondary text-xs">{item.amount}</span>
