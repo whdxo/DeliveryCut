@@ -7,6 +7,16 @@
 
 ## 📌 현재 상태 파악
 
+### 앱 구조 (2가지 모드)
+
+홈 화면(`/home`)에서 두 갈래로 분기됩니다:
+
+```
+/home
+├── /quick     → 즉시 한끼 (재료+시간+도구 → 메뉴 3개 추천 → /result)
+└── /planner   → 플랜 생성기 (기간/끼니/예산 → 식단표 + 장보기)
+```
+
 ### 이미 구현된 것 (건드리지 않기)
 
 | 파일 | 상태 | 내용 |
@@ -14,22 +24,67 @@
 | `lib/types/api.ts` | ✅ 완성 | `GenerateInput`, `GenerateOutput`, `MenuOption` 등 타입 전부 정의됨 |
 | `lib/ai/schema.ts` | ✅ 완성 | 입력 검증 `validateGenerateInput()`, 출력 검증 `validateGenerateOutput()` 구현됨 |
 | `app/api/generate/route.ts` | ✅ 완성 | 입력 받기 → 검증 → AI 호출 → 출력 검증 → Firebase 저장 전체 흐름 완성 |
+| `app/quick/page.tsx` | ✅ 완성 | 즉시 한끼 입력 UI — `/result`로 URLSearchParams 전달 |
+| `app/planner/page.tsx` | ✅ 완성 | 플랜 생성 UI — 현재 하드코딩 Mock 데이터 표시 |
+| `app/result/page.tsx` | ✅ 완성 | 결과 UI — 현재 `MOCK_MENUS` 하드코딩 데이터 사용 |
 | `lib/ai/generateMenu.ts` | 🔄 Mock | OpenAI 연동만 빠진 상태. 이 파일만 수정하면 됨 |
-
-### 내가 할 일은 딱 하나
-
-**`lib/ai/generateMenu.ts` 의 Mock을 실제 OpenAI API 호출로 교체**
-
-타입, 검증, API Route는 이미 완성돼 있으므로 건드리지 않는다.
 
 ---
 
-## 📐 현재 타입 구조 (이미 확정됨)
+## 🗺️ 현재 데이터 흐름
+
+### 즉시 한끼 흐름 (현재 상태)
+
+```
+/quick 입력
+  ↓ handleSubmit()
+router.push(`/result?time=10분&tools=팬&ingredients=계란,김치&mode=quick`)
+  ↓
+/result?...
+  ↓ useSearchParams()로 파라미터 읽기
+MOCK_MENUS 하드코딩 3개 메뉴 표시  ← API 호출 없음
+```
+
+### 즉시 한끼 흐름 (AI 연동 후 목표)
+
+```
+/quick 입력
+  ↓ handleSubmit()
+POST /api/generate { timeLimitMin, tools, ingredientsText, dislikedIngredientsText }
+  ↓ validateGenerateInput()
+  ↓ generateMenu()  ← OpenAI API 호출  ← 내가 작업할 부분
+  ↓ validateGenerateOutput()
+  ↓ saveResult() → Firebase
+  ↓ { resultId, output }
+sessionStorage에 캐시 저장
+router.push(`/result?resultId=xxx`)
+  ↓
+/result?resultId=xxx
+  ↓ sessionStorage 또는 /api/results/xxx 조회
+실제 AI 추천 메뉴 3개 표시
+```
+
+### 플랜 생성 흐름 (현재 상태)
+
+```
+/planner 입력 (기간, 끼니, 예산, 기피재료)
+  ↓ "플랜 생성하기" 버튼
+setGenerated(true)  ← API 호출 없이 로컬 Mock 데이터 표시
+PLAN_BASE[] 하드코딩 식단 표시
+SHOPPING_BASE[] 하드코딩 장보기 표시
+```
+
+> **참고**: 플랜 생성기는 현재 API 연동이 없는 순수 Mock 상태.
+> 즉시 한끼(/quick) AI 연동이 우선. 플랜 생성 API 연동은 추후 별도 작업.
+
+---
+
+## 📐 타입 구조 (이미 확정됨)
 
 ```typescript
 // lib/types/api.ts — 이미 구현된 타입, 변경 없음
 
-// 입력 (홈 화면 → /api/generate)
+// 입력 (/quick → /api/generate)
 interface GenerateInput {
   timeLimitMin: 5 | 10 | 15
   tools: ("microwave" | "pan" | "airfryer")[]
@@ -37,10 +92,10 @@ interface GenerateInput {
   dislikedIngredientsText?: string // "땅콩, 유제품" (선택)
 }
 
-// 출력 (AI → /api/generate → 결과 화면)
+// 출력 (AI → /api/generate → /result)
 interface GenerateOutput {
   menuOptions: [MenuOption, MenuOption, MenuOption]  // 정확히 3개
-  threeDayPlan: [ThreeDayPlanItem, ThreeDayPlanItem, ThreeDayPlanItem]  // 정확히 3일
+  threeDayPlan: [ThreeDayPlanItem, ThreeDayPlanItem, ThreeDayPlanItem]
   shoppingList: ShoppingItem[]
   ingredientsUsed?: Record<string, number>
 }
@@ -56,29 +111,15 @@ interface MenuOption {
   difficulty?: "easy" | "medium" | "hard"
   kcal?: number
 }
-
-interface ThreeDayPlanItem {
-  day: 1 | 2 | 3
-  breakfast: string
-  lunch: string
-  dinner: string
-}
-
-interface ShoppingItem {
-  item: string
-  quantity: number
-  unit: string
-  reason?: string
-}
 ```
 
 ---
 
 ## ✅ 작업 순서
 
-### Step 1 — 환경 설정
+### Step 1 — 환경 설정 ✅ 완료
 
-`.env.local` 에 추가:
+`.env.local` 에 이미 추가됨:
 ```
 OPENAI_API_KEY=sk-proj-...
 ```
@@ -135,16 +176,13 @@ export const RULES_PROMPT = `
 
 export function buildUserPrompt(input: GenerateInput): string {
   const { timeLimitMin, tools, ingredientsText, dislikedIngredientsText } = input
-
   const toolNames: Record<string, string> = {
     microwave: "전자레인지",
     pan: "팬",
     airfryer: "에어프라이어",
   }
-
   return `
 # 사용자 조건
-
 - 요리 시간: ${timeLimitMin}분 이내
 - 사용 가능한 도구: ${tools.map(t => toolNames[t] ?? t).join(", ")}
 - 냉장고 재료: ${ingredientsText}
@@ -174,13 +212,11 @@ JSON 스키마를 정확히 준수해서 반환하세요.
 import OpenAI from "openai"
 import { SYSTEM_PROMPT, RULES_PROMPT, buildUserPrompt } from "./prompts"
 import type { GenerateInput, GenerateOutput } from "@/lib/types/api"
+import { generateOutputJsonSchema } from "./schema"
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 })
-
-// schema.ts에 이미 정의된 JSON 스키마를 OpenAI에 그대로 전달
-import { generateOutputJsonSchema } from "./schema"
 
 export const generateMenu = async (input: GenerateInput): Promise<GenerateOutput> => {
   const response = await client.chat.completions.create({
@@ -211,11 +247,34 @@ export const generateMenu = async (input: GenerateInput): Promise<GenerateOutput
 
 > **주의**: `generateOutputJsonSchema` 를 그대로 재사용하기 때문에
 > OpenAI 스키마와 검증 스키마가 항상 일치한다.
-> 별도로 스키마를 두 번 작성하지 않아도 됨.
 
 ---
 
-### Step 4 — 로컬 테스트
+### Step 4 — /quick → /result 연동 수정 (팀원 협업)
+
+현재 `/quick/page.tsx`의 `handleSubmit()`은 URLSearchParams로 직접 이동:
+```typescript
+// 현재 (API 호출 없음)
+router.push(`/result?time=...&tools=...&ingredients=...&mode=quick`)
+```
+
+AI 연동 후에는 API를 호출하고 resultId로 이동:
+```typescript
+// 목표
+const res = await fetch("/api/generate", { method: "POST", body: JSON.stringify(payload) })
+const data = await res.json()
+sessionStorage.setItem(`deliverycut:result:${data.resultId}`, JSON.stringify({ ...data, input: payload }))
+router.push(`/result?resultId=${data.resultId}`)
+```
+
+그리고 `/result/page.tsx`도 `MOCK_MENUS` 대신 API 결과를 사용하도록 수정 필요.
+
+> **⚠️ 내 범위**: `generateMenu.ts`와 `prompts.ts` 완성이 핵심.
+> `/quick/page.tsx`, `/result/page.tsx` UI 연동은 팀원과 협업.
+
+---
+
+### Step 5 — 로컬 테스트
 
 개발 서버 실행:
 ```bash
@@ -264,7 +323,7 @@ curl -X POST http://localhost:3001/api/generate \
 
 ---
 
-### Step 5 — 문제 발생 시 대응
+### Step 6 — 문제 발생 시 대응
 
 | 문제 | 원인 | 대응 |
 |------|------|------|
@@ -298,6 +357,12 @@ lib/
 ├── types/
 │   └── api.ts            ← 건드리지 않음 (이미 완성)
 app/
+├── quick/
+│   └── page.tsx          ← handleSubmit() API 호출 방식으로 변경 (팀원 협업)
+├── result/
+│   └── page.tsx          ← MOCK_MENUS → API 데이터 연동 (팀원 협업)
+├── planner/
+│   └── page.tsx          ← 추후 별도 API 설계 (플랜 생성 v2)
 └── api/
     └── generate/
         └── route.ts      ← 건드리지 않음 (이미 완성)
@@ -307,13 +372,18 @@ app/
 
 ## ✅ 완료 기준 (Definition of Done)
 
-- [ ] `OPENAI_API_KEY` 설정 완료
+### 내 담당 (AI 핵심)
+- [x] `OPENAI_API_KEY` 설정 완료
 - [ ] `lib/ai/prompts.ts` 작성 완료
 - [ ] `lib/ai/generateMenu.ts` Mock → OpenAI 교체 완료
 - [ ] curl 테스트 3케이스 모두 200 응답
-- [ ] 결과 화면(`/result`)에서 실제 AI 메뉴 표시 확인
 - [ ] `validateGenerateOutput()` 에러 없이 통과 (422 없음)
 - [ ] `npx tsc --noEmit` TypeScript 에러 없음
+
+### 팀원 협업 필요
+- [ ] `/quick/page.tsx` → API 호출 방식으로 handleSubmit 수정
+- [ ] `/result/page.tsx` → Mock 데이터 → API 결과 표시로 교체
+- [ ] `/planner/page.tsx` → 별도 Planner API 설계 (추후)
 
 ---
 
@@ -322,5 +392,6 @@ app/
 - [현재 타입 정의](../../lib/types/api.ts)
 - [현재 스키마/검증](../../lib/ai/schema.ts)
 - [현재 API Route](../../app/api/generate/route.ts)
-- [AI 시스템 설계 문서](../../claude/프로젝트문서/2.기술설계/2.4-AI-시스템-설계.md)
-- [AI 출력 스키마 + 프롬프트 초안](../../claude/초기%20문서/AI%20출력%20스키마%20+%20프롬프트.md)
+- [즉시 한끼 입력 페이지](../../app/quick/page.tsx)
+- [결과 표시 페이지](../../app/result/page.tsx)
+- [플랜 생성 페이지](../../app/planner/page.tsx)
