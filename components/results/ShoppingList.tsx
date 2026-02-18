@@ -23,12 +23,18 @@ export default function ShoppingList({ items, onRegenerate }: ShoppingListProps)
       </div>
 
       <div className="flex flex-col gap-2">
-        {items.map((item, i) => (
-          <div key={i} className="flex items-center justify-between">
-            <span className="text-dc-text text-sm">{item.name}</span>
-            <span className="text-dc-text-secondary text-xs">{item.amount}</span>
+        {items.length === 0 ? (
+          <div className="text-dc-text-secondary text-sm text-center py-4">
+            장보기 목록이 없어요
           </div>
-        ))}
+        ) : (
+          items.map((item, i) => (
+            <div key={i} className="flex items-center justify-between">
+              <span className="text-dc-text text-sm">{item.name}</span>
+              <span className="text-dc-text-secondary text-xs">{item.amount}</span>
+            </div>
+          ))
+        )}
       </div>
 
       <div className="flex flex-col gap-2">
