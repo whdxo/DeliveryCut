@@ -16,6 +16,8 @@ export {
   updateDocument,
   deleteDocument,
   getDocuments,
+  saveGeneratedPlan,
+  getGeneratedPlanById,
   saveMenuPlan,
   getUserMenuPlans,
 } from "./firestore"
