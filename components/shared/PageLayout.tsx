@@ -1,13 +1,13 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { logOut, onAuthChange } from "@/lib/firebase"
 // ✅ Lucide 아이콘 import
 import { Zap, Calendar, History, User } from "lucide-react"
 
-export function DesktopLayout({ children }: { children: React.ReactNode }) {
+export function DesktopLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex w-full min-h-screen">
       <div className="flex-1 bg-dc-side border-r border-dc-border hidden lg:block" />
@@ -66,22 +66,20 @@ export function NavBar({ variant = "app" }: NavBarProps) {
               >
                 로그아웃
               </button>
-            ) : (
-              <>
-                <Link
-                  href="/login"
-                  className="h-11 px-4 rounded-full bg-dc-muted text-dc-text text-[13px] font-semibold flex items-center justify-center hover:bg-dc-border transition-colors"
-                >
-                  로그인
-                </Link>
-                <Link
-                  href="/home"
-                  className="h-11 px-4 rounded-full bg-dc-primary text-white text-[13px] font-semibold flex items-center justify-center hover:bg-[#2d6b45] transition-colors"
-                >
-                  무료로 시작하기
-                </Link>
-              </>
+                        ) : (
+              <Link
+                href="/login"
+                className="h-11 px-4 rounded-full bg-dc-muted text-dc-text text-[13px] font-semibold flex items-center justify-center hover:bg-dc-border transition-colors"
+              >
+                로그인
+              </Link>
             )}
+            <Link
+              href="/home"
+              className="h-11 px-4 rounded-full bg-dc-primary text-white text-[13px] font-semibold flex items-center justify-center hover:bg-[#2d6b45] transition-colors"
+            >
+              무료로 시작하기
+            </Link>
           </div>
         ) : (
           <div className="hidden lg:flex items-center gap-3">
@@ -168,3 +166,4 @@ export function MobileBottomNav() {
     </div>
   )
 }
+

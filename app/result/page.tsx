@@ -1,110 +1,271 @@
 "use client"
 
-import { Suspense, useEffect, useState } from "react"
+import { useState, Suspense, useMemo, useEffect } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { NavBar, MobileBottomNav } from "@/components/shared/PageLayout"
-import type { MenuOption, ResultResponse, StoredMenuPlan } from "@/lib/types/api"
+import MenuCard from "@/components/results/MenuCard"
+import RecipeView from "@/components/results/RecipeView"
+import ShoppingList from "@/components/results/ShoppingList"
+import { onAuthChange } from "@/lib/firebase"
+import { isQuantityUnit } from "@/lib/fridge/unit"
+import type { ApiError, FridgeConsumeInput, FridgeItem, MenuOption, QuantityUnit, ResultResponse, Tool } from "@/lib/types/api"
 
-function getCoupangUrl(keyword: string) {
-  return `https://www.coupang.com/np/search?q=${encodeURIComponent(keyword)}`
+const cacheKey = (resultId: string) => `deliverycut:result:${resultId}`
+
+const toolLabel: Record<Tool, string> = {
+  microwave: "전자레인지",
+  pan: "팬",
+  airfryer: "에어프라이어",
+}
+
+function SkeletonCard() {
+  return (
+    <div className="animate-pulse bg-dc-surface rounded-2xl border border-dc-border p-5 flex flex-col gap-3">
+      <div className="h-4 bg-dc-muted rounded w-1/3" />
+      <div className="h-3 bg-dc-muted rounded w-2/3" />
+      <div className="h-3 bg-dc-muted rounded w-1/2" />
+    </div>
+  )
+}
+
+function LoadingState() {
+  return (
+    <div className="flex flex-col gap-4 w-full">
+      <div className="hidden lg:grid grid-cols-3 gap-4">
+        <SkeletonCard />
+        <SkeletonCard />
+        <SkeletonCard />
+      </div>
+      <div className="flex flex-col lg:flex-row gap-6">
+        <div className="flex-1 animate-pulse bg-dc-surface rounded-2xl border border-dc-border p-6 h-64" />
+        <div className="lg:w-[280px] animate-pulse bg-dc-surface rounded-2xl border border-dc-border p-6 h-64" />
+      </div>
+    </div>
+  )
+}
+
+function ErrorState({ message }: { message: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
+      <div className="text-4xl">😕</div>
+      <div className="text-dc-text font-bold text-lg">결과를 찾을 수 없어요</div>
+      <div className="text-dc-text-secondary text-sm">{message}</div>
+      <Link
+        href="/home"
+        className="mt-2 h-11 px-6 bg-dc-primary text-white text-sm font-bold rounded-xl flex items-center hover:bg-[#2d6b45] transition-colors"
+      >
+        다시 만들기
+      </Link>
+    </div>
+  )
+}
+
+function normalizeShoppingUnit(unit: string): QuantityUnit {
+  if (isQuantityUnit(unit)) return unit
+  const lower = unit.toLowerCase()
+  if (lower === "개") return "count"
+  if (lower === "l") return "l"
+  if (lower === "ml") return "ml"
+  if (lower === "kg") return "kg"
+  if (lower === "g") return "g"
+  return "count"
 }
 
 function ResultContent() {
   const searchParams = useSearchParams()
   const resultId = searchParams.get("resultId")
 
+  const [activeTab, setActiveTab] = useState<"recipe" | "plan">("recipe")
+  const [selectedMenu, setSelectedMenu] = useState(0)
   const [result, setResult] = useState<ResultResponse | null>(null)
-  const [selectedIndex, setSelectedIndex] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
+  const [error, setError] = useState<string | null>(null)
+
+  const [userId, setUserId] = useState<string | null>(null)
+  const [fridgeItems, setFridgeItems] = useState<FridgeItem[]>([])
+  const [showConsumeModal, setShowConsumeModal] = useState(false)
+  const [consumeDraft, setConsumeDraft] = useState<{ itemId: string; name: string; amount: number; unit: QuantityUnit }[]>([])
+  const [consumeError, setConsumeError] = useState<string | null>(null)
+  const [consumeSuccess, setConsumeSuccess] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!resultId) {
-      setError("결과를 찾을 수 없습니다.")
-      setLoading(false)
-      return
-    }
+    const unsubscribe = onAuthChange((user) => {
+      setUserId(user?.uid ?? null)
+    })
 
-    // sessionStorage 캐시 우선
-    const cached = sessionStorage.getItem(`deliverycut:result:${resultId}`)
-    if (cached) {
-      try {
-        setResult(JSON.parse(cached) as ResultResponse)
+    return () => unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!resultId) {
+        setError("올바르지 않은 접근이에요.")
         setLoading(false)
         return
-      } catch {
-        // 캐시 파싱 실패 시 API로 fallback
+      }
+
+      const cached = sessionStorage.getItem(cacheKey(resultId))
+      if (cached) {
+        try {
+          setResult(JSON.parse(cached) as ResultResponse)
+          setLoading(false)
+          return
+        } catch {
+          // fallback to API
+        }
+      }
+
+      setLoading(true)
+      try {
+        const res = await fetch(`/api/results/${resultId}`)
+        if (!res.ok) {
+          throw new Error("결과가 만료됐거나 존재하지 않아요.")
+        }
+        const data: ResultResponse = await res.json()
+        setResult(data)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "알 수 없는 오류가 발생했습니다.")
+      } finally {
+        setLoading(false)
       }
     }
 
-    // API 조회 (StoredMenuPlan → ResultResponse 변환)
-    fetch(`/api/results/${resultId}`)
-      .then((res) => {
-        if (!res.ok) throw new Error("not found")
-        return res.json() as Promise<StoredMenuPlan>
-      })
-      .then((data) => {
-        const converted: ResultResponse = {
-          resultId: data.resultId,
-          input: data.input,
-          output: data.output,
-          createdAt: data.createdAt,
-        }
-        setResult(converted)
-      })
-      .catch(() => setError("결과를 불러오지 못했습니다."))
-      .finally(() => setLoading(false))
+    void fetchData()
   }, [resultId])
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-dc-bg flex items-center justify-center">
-        <p className="text-dc-text-secondary text-sm">AI 메뉴를 불러오는 중...</p>
-      </div>
-    )
+  useEffect(() => {
+    if (!userId) return
+
+    const loadFridge = async () => {
+      try {
+        const response = await fetch("/api/fridge", {
+          headers: { "x-user-id": userId },
+        })
+        if (!response.ok) return
+        const data = (await response.json()) as { items: FridgeItem[] }
+        setFridgeItems(data.items)
+      } catch {
+        // ignore fridge sync failure on result page
+      }
+    }
+
+    void loadFridge()
+  }, [userId])
+
+  const menus = useMemo(() => {
+    if (!result) return []
+    return result.output.menuOptions.map((menu, idx) => ({
+      id: idx,
+      name: menu.title,
+      tags: [`${menu.timeMin}분`, ...menu.tools.map((tool) => toolLabel[tool]), "1인분"],
+    }))
+  }, [result])
+
+  const selectedData: MenuOption | null = useMemo(() => {
+    if (!result) return null
+    return result.output.menuOptions[selectedMenu] || null
+  }, [result, selectedMenu])
+
+  const recipe = selectedData
+    ? { name: selectedData.title, ingredients: selectedData.ingredients, steps: selectedData.steps }
+    : null
+
+  const mealPlan = result
+    ? result.output.threeDayPlan.map((item) => ({
+        day: `Day ${item.day}`,
+        meals: [item.breakfast, item.lunch, item.dinner],
+      }))
+    : []
+
+  const shopping = result
+    ? result.output.shoppingList.map((item) => ({
+        name: item.item,
+        amount: `${item.quantity}${item.unit}`,
+      }))
+    : []
+
+  const prepareConsumeDraft = () => {
+    if (!result || !selectedData) return
+
+    const rows = result.output.shoppingList
+      .map((shoppingItem) => {
+        const matched = fridgeItems.find((f) => f.name.trim() === shoppingItem.item.trim())
+        if (!matched) return null
+
+        return {
+          itemId: matched.id,
+          name: matched.name,
+          amount: shoppingItem.quantity,
+          unit: normalizeShoppingUnit(shoppingItem.unit),
+        }
+      })
+      .filter(Boolean) as { itemId: string; name: string; amount: number; unit: QuantityUnit }[]
+
+    setConsumeDraft(rows)
+    setConsumeError(null)
+    setConsumeSuccess(null)
+    setShowConsumeModal(true)
   }
 
-  if (error || !result) {
-    return (
-      <div className="min-h-screen bg-dc-bg flex flex-col items-center justify-center gap-4">
-        <p className="text-dc-text-secondary text-sm">{error || "결과를 찾을 수 없습니다."}</p>
-        <Link href="/quick" className="h-11 px-6 rounded-xl bg-dc-primary text-white text-sm font-semibold flex items-center">
-          다시 시도하기
-        </Link>
-      </div>
-    )
-  }
+  const submitConsume = async () => {
+    if (!userId || !selectedData || !result || consumeDraft.length === 0) {
+      setConsumeError("차감할 재료가 없습니다.")
+      return
+    }
 
-  const { output, input } = result
-  const menus = output.menuOptions
-  const selected: MenuOption = menus[selectedIndex]
+    const payload: FridgeConsumeInput = {
+      recipeId: selectedData.optionId,
+      resultId: result.resultId,
+      items: consumeDraft.map((item) => ({
+        itemId: item.itemId,
+        amount: item.amount,
+        unit: item.unit,
+      })),
+    }
 
-  const toolDisplayNames: Record<string, string> = {
-    microwave: "전자레인지",
-    pan: "팬",
-    airfryer: "에어프라이어",
+    try {
+      const response = await fetch("/api/fridge/consume", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id": userId,
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        const apiError = (await response.json()) as ApiError
+        throw new Error(apiError.error.message)
+      }
+
+      setConsumeSuccess("차감이 완료되었습니다.")
+      setShowConsumeModal(false)
+    } catch (consumeSubmitError) {
+      setConsumeError(
+        consumeSubmitError instanceof Error ? consumeSubmitError.message : "재료 차감에 실패했습니다."
+      )
+    }
   }
 
   return (
     <div className="min-h-screen bg-dc-bg">
-      {/* 헤더 */}
       <div className="sticky top-0 z-50 w-full border-b border-dc-border bg-dc-surface">
         <div className="lg:hidden flex items-center justify-between h-14 px-5 bg-dc-surface">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             <Link
-              href="/quick"
-              className="w-11 h-11 bg-dc-muted rounded-xl flex items-center justify-center text-dc-text-secondary text-lg"
+              href="/home"
+              className="w-8 h-8 bg-dc-muted rounded-lg flex items-center justify-center text-dc-text-secondary text-lg"
             >
               ←
             </Link>
-            <span className="text-dc-text text-[15px] font-bold">추천 결과</span>
+            <span className="text-dc-text text-base font-bold">추천 결과</span>
           </div>
           <Link
-            href="/quick"
-            className="h-11 px-4 bg-dc-muted rounded-xl text-dc-text-secondary text-[13px] font-medium flex items-center"
+            href="/home"
+            className="h-8 px-3 bg-dc-muted rounded-lg text-dc-text-secondary text-xs font-medium flex items-center"
           >
-            다시 입력
+            다시 만들기
           </Link>
         </div>
         <div className="hidden lg:block">
@@ -112,168 +273,135 @@ function ResultContent() {
         </div>
       </div>
 
-      <div className="flex w-full min-h-[calc(100vh-3.5rem)] lg:min-h-[calc(100vh-4rem)]">
+      <div className="flex w-full">
         <div className="flex-1 bg-dc-side border-r border-dc-border hidden lg:block" />
 
-        <main className="w-full lg:w-[960px] lg:flex-none px-5 lg:px-10 py-4 lg:py-12 flex flex-col gap-4 lg:gap-6 pb-nav-safe lg:pb-12">
+        <div className="w-full lg:w-[960px] lg:flex-none px-5 lg:px-10 py-6 lg:py-12 flex flex-col gap-6 lg:gap-8 pb-24 lg:pb-12">
+          <div className="hidden lg:flex flex-col gap-1">
+            <h1 className="text-dc-text text-[28px] font-bold">오늘의 추천 메뉴</h1>
+            <p className="text-dc-text-secondary text-sm">메뉴를 선택하면 레시피와 장보기 목록을 볼 수 있어요</p>
+          </div>
+          <div className="lg:hidden flex flex-col gap-1">
+            <h1 className="text-dc-text text-xl font-bold">오늘의 추천 메뉴</h1>
+            <p className="text-dc-text-secondary text-xs">메뉴를 선택하면 레시피를 볼 수 있어요</p>
+          </div>
 
-          {/* 입력 요약 */}
-          <section className="bg-dc-surface border border-dc-border rounded-2xl p-4 lg:p-5">
-            <p className="text-dc-text text-[13px] font-semibold">입력 요약</p>
-            <p className="text-dc-text-secondary text-[12px] lg:text-xs mt-1.5 leading-relaxed">
-              시간: {input.timeLimitMin}분 · 도구: {input.tools.map((t) => toolDisplayNames[t] ?? t).join(", ")}
-            </p>
-            <p className="text-dc-text-secondary text-[12px] lg:text-xs mt-0.5 leading-relaxed">
-              재료: {input.ingredientsText}
-            </p>
-          </section>
+          {loading && <LoadingState />}
+          {!loading && error && <ErrorState message={error} />}
 
-          {/* 메뉴 선택 */}
-          <section className="flex flex-col gap-3">
-            <h1 className="text-dc-text text-[18px] lg:text-[28px] font-bold">추천 메뉴 3가지</h1>
-            <div className="flex gap-3 overflow-x-auto pb-1 snap-x snap-mandatory scroll-smooth -mx-5 px-5 lg:mx-0 lg:px-0 lg:grid lg:grid-cols-3 lg:overflow-visible lg:pb-0">
-              {menus.map((menu, index) => (
+          {!loading && !error && result && recipe && (
+            <>
+              <MenuCard menus={menus} selectedMenu={selectedMenu} onSelect={setSelectedMenu} />
+
+              <div className="flex justify-end">
                 <button
-                  key={menu.optionId}
-                  onClick={() => setSelectedIndex(index)}
-                  className={`flex-none w-[180px] lg:w-auto snap-start p-4 rounded-2xl border text-left transition-all ${
-                    selectedIndex === index
-                      ? "border-dc-primary bg-dc-primary-light"
-                      : "border-dc-border bg-dc-surface"
-                  }`}
+                  type="button"
+                  onClick={prepareConsumeDraft}
+                  disabled={!userId}
+                  className="h-10 px-4 rounded-xl bg-dc-primary text-white text-sm font-semibold disabled:opacity-50"
                 >
-                  <p className="text-dc-text text-[14px] font-bold leading-snug">{menu.title}</p>
-                  <p className="text-dc-text-secondary text-[12px] mt-1">
-                    {menu.timeMin}분 · {menu.tools.map((t) => toolDisplayNames[t] ?? t).join("+")}
-                    {menu.difficulty ? ` · ${menu.difficulty}` : ""}
-                  </p>
-                  {selectedIndex === index && (
-                    <span className="mt-2 inline-block text-[11px] font-bold text-dc-primary">✓ 선택됨</span>
-                  )}
+                  요리 완료 후 재료 차감
                 </button>
-              ))}
-            </div>
-          </section>
-
-          {/* 레시피 + 장보기 */}
-          <section className="flex flex-col-reverse gap-4 lg:gap-6 lg:grid lg:grid-cols-[1fr_280px]">
-
-            {/* 레시피 상세 */}
-            <article className="bg-dc-surface rounded-2xl border border-dc-border p-5 lg:p-6">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-dc-text text-[17px] lg:text-lg font-bold">{selected.title}</h2>
-                  {selected.tip && (
-                    <p className="text-dc-text-secondary text-[13px] mt-1.5 leading-relaxed">
-                      💡 {selected.tip}
-                    </p>
-                  )}
-                </div>
-                <span className="text-[11px] font-semibold bg-dc-primary-light text-dc-primary px-2.5 py-1 rounded-full whitespace-nowrap flex-none">
-                  선택됨
-                </span>
               </div>
 
-              {/* 재료 */}
-              <div className="mt-5">
-                <p className="text-dc-text text-[13px] font-semibold">재료</p>
-                <ul className="mt-2 space-y-1.5">
-                  {selected.ingredients.map((item) => (
-                    <li key={item} className="text-dc-text-secondary text-[14px] leading-relaxed flex gap-1.5">
-                      <span className="text-dc-text-muted">-</span>
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
+              {consumeError ? (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{consumeError}</div>
+              ) : null}
+              {consumeSuccess ? (
+                <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">{consumeSuccess}</div>
+              ) : null}
+
+              <div className="flex flex-col lg:flex-row gap-6">
+                <RecipeView
+                  recipe={recipe}
+                  mealPlan={mealPlan}
+                  activeTab={activeTab}
+                  onTabChange={setActiveTab}
+                />
+                <ShoppingList items={shopping} />
               </div>
-
-              <div className="h-px bg-dc-border my-5" />
-
-              {/* 조리 순서 */}
-              <div>
-                <p className="text-dc-text text-[13px] font-semibold">조리 순서</p>
-                <ol className="mt-2 space-y-2.5">
-                  {selected.steps.map((step, index) => (
-                    <li key={index} className="flex gap-2.5">
-                      <span className="text-dc-primary text-[14px] font-bold flex-none">{index + 1}.</span>
-                      <span className="text-dc-text-secondary text-[14px] leading-[1.7]">{step}</span>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-
-              {/* 액션 버튼 */}
-              <div className="mt-6 flex flex-col sm:flex-row gap-2">
-                <a
-                  href={`https://www.10000recipe.com/recipe/list.html?q=${encodeURIComponent(selected.title)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="h-11 px-4 rounded-xl bg-dc-primary text-white text-[13px] font-semibold flex items-center justify-center hover:bg-[#2d6b45] transition-colors"
-                >
-                  레시피 더보기
-                </a>
-                <a
-                  href={`https://www.youtube.com/results?search_query=${encodeURIComponent(selected.title + " 레시피")}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="h-11 px-4 rounded-xl bg-dc-muted text-dc-text-secondary text-[13px] font-semibold flex items-center justify-center hover:bg-dc-border transition-colors"
-                >
-                  유튜브 영상 보기
-                </a>
-              </div>
-            </article>
-
-            {/* 장보기 */}
-            <aside className="bg-dc-surface rounded-2xl border border-dc-border p-5 lg:p-6">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-dc-text text-[15px] font-bold">간단 장보기</h2>
-                <span className="text-[10px] font-semibold text-dc-primary bg-dc-primary-light px-2 py-0.5 rounded-full">
-                  quick
-                </span>
-              </div>
-              {output.shoppingList.length === 0 ? (
-                <p className="text-dc-text-secondary text-[13px]">추가 구매 필요 없음</p>
-              ) : (
-                <div className="divide-y divide-dc-border">
-                  {output.shoppingList.map((item) => (
-                    <div key={item.item} className="flex items-center justify-between min-h-[44px]">
-                      <span className="text-dc-text text-[14px]">{item.item}</span>
-                      <span className="text-dc-text-secondary text-[12px]">{item.quantity}{item.unit}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {output.shoppingList.length > 0 && (
-                <a
-                  href={getCoupangUrl(output.shoppingList[0]?.item ?? selected.title)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-4 h-11 rounded-xl bg-dc-muted text-dc-text-secondary text-[13px] font-semibold flex items-center justify-center hover:bg-dc-border transition-colors"
-                >
-                  이 메뉴 재료 구매 검색
-                </a>
-              )}
-            </aside>
-          </section>
-
-          {/* 3일 플랜 */}
-          <section className="bg-dc-surface border border-dc-border rounded-2xl p-5 lg:p-6">
-            <h2 className="text-dc-text text-[15px] font-bold mb-4">3일 식단 플랜</h2>
-            <div className="space-y-3">
-              {output.threeDayPlan.map((day) => (
-                <div key={day.day} className="border border-dc-border rounded-xl p-3">
-                  <p className="text-dc-text text-[13px] font-semibold">{day.day}일차</p>
-                  <p className="mt-1 text-dc-text-secondary text-[13px]">
-                    아침: {day.breakfast} · 점심: {day.lunch} · 저녁: {day.dinner}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </section>
-        </main>
+            </>
+          )}
+        </div>
 
         <div className="flex-1 bg-dc-side border-l border-dc-border hidden lg:block" />
       </div>
+
+      {showConsumeModal ? (
+        <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4">
+          <div className="w-full max-w-xl bg-white rounded-2xl border border-dc-border p-5 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-dc-text">재료 차감 확인</h2>
+              <button type="button" onClick={() => setShowConsumeModal(false)} className="text-dc-text-secondary">닫기</button>
+            </div>
+
+            {consumeDraft.length === 0 ? (
+              <div className="text-sm text-dc-text-secondary">장보기 목록과 일치하는 냉장고 재료가 없습니다.</div>
+            ) : (
+              <div className="flex flex-col gap-2 max-h-[40vh] overflow-auto">
+                {consumeDraft.map((item, idx) => (
+                  <div key={item.itemId} className="flex gap-2 items-center">
+                    <div className="w-28 text-sm text-dc-text">{item.name}</div>
+                    <input
+                      type="number"
+                      min={0.1}
+                      step={0.1}
+                      value={item.amount}
+                      onChange={(e) => {
+                        const next = [...consumeDraft]
+                        next[idx] = {
+                          ...next[idx],
+                          amount: Number(e.target.value),
+                        }
+                        setConsumeDraft(next)
+                      }}
+                      className="h-9 w-24 px-2 border border-dc-border rounded-lg"
+                    />
+                    <select
+                      value={item.unit}
+                      onChange={(e) => {
+                        const next = [...consumeDraft]
+                        next[idx] = {
+                          ...next[idx],
+                          unit: e.target.value as QuantityUnit,
+                        }
+                        setConsumeDraft(next)
+                      }}
+                      className="h-9 px-2 border border-dc-border rounded-lg"
+                    >
+                      <option value="count">개</option>
+                      <option value="g">g</option>
+                      <option value="kg">kg</option>
+                      <option value="ml">ml</option>
+                      <option value="l">L</option>
+                      <option value="pack">팩</option>
+                      <option value="tbsp">큰술</option>
+                      <option value="tsp">작은술</option>
+                    </select>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowConsumeModal(false)}
+                className="h-9 px-4 rounded-lg border border-dc-border text-sm"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={submitConsume}
+                className="h-9 px-4 rounded-lg bg-dc-primary text-white text-sm font-semibold"
+              >
+                확정 차감
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <MobileBottomNav />
     </div>
@@ -282,13 +410,7 @@ function ResultContent() {
 
 export default function ResultPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-dc-bg flex items-center justify-center text-dc-text-secondary text-sm">
-          로딩 중...
-        </div>
-      }
-    >
+    <Suspense fallback={<div className="min-h-screen bg-dc-bg flex items-center justify-center text-dc-text-secondary">로딩 중...</div>}>
       <ResultContent />
     </Suspense>
   )

@@ -1,84 +1,83 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { NavBar, MobileBottomNav } from "@/components/shared/PageLayout"
-import type { FridgeItem, FridgeCategory, QuantityUnit } from "@/lib/types/fridge"
-import { CATEGORIES, UNITS, INGREDIENT_SUGGESTIONS } from "@/lib/types/fridge"
+import { onAuthChange } from "@/lib/firebase"
+import type { FridgeCategory, FridgeItem, FridgeListResponse, QuantityUnit } from "@/lib/types/api"
+import { FRIDGE_CATEGORIES as CATEGORIES, QUANTITY_UNITS as UNITS } from "@/lib/fridge/constants";
+import { INGREDIENT_SUGGESTIONS } from "@/lib/types/fridge" // TODO: This should also be moved to constants
 
 export default function FridgePage() {
   const router = useRouter()
-  
-  // TODO: Firestore에서 가져와야 함
-  const [items, setItems] = useState<FridgeItem[]>([
-    {
-      id: "1",
-      name: "계란",
-      category: "processed",
-      amount: 10,
-      unit: "count",
-      expiresOn: "2026-02-25",
-      createdAt: "2026-02-17T00:00:00Z",
-      updatedAt: "2026-02-17T00:00:00Z",
-    },
-    {
-      id: "2",
-      name: "김치",
-      category: "vegetable",
-      amount: 500,
-      unit: "g",
-      expiresOn: "2026-02-20",
-      createdAt: "2026-02-17T00:00:00Z",
-      updatedAt: "2026-02-17T00:00:00Z",
-    },
-    {
-      id: "3",
-      name: "두부",
-      category: "processed",
-      amount: 1,
-      unit: "pack",
-      expiresOn: "2026-02-19",
-      createdAt: "2026-02-17T00:00:00Z",
-      updatedAt: "2026-02-17T00:00:00Z",
-    },
-  ])
+
+  const [userId, setUserId] = useState<string | null>(null)
+  const [authLoading, setAuthLoading] = useState(true)
+
+  const [items, setItems] = useState<FridgeItem[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const [activeCategory, setActiveCategory] = useState<FridgeCategory | "all">("all")
   const [sortBy, setSortBy] = useState<"expiresOn" | "updatedAt">("expiresOn")
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingItem, setEditingItem] = useState<FridgeItem | null>(null)
+  const [saving, setSaving] = useState(false)
 
-  // 폼 상태
   const [formName, setFormName] = useState("")
   const [formCategory, setFormCategory] = useState<FridgeCategory>("other")
   const [formAmount, setFormAmount] = useState("")
   const [formUnit, setFormUnit] = useState<QuantityUnit>("count")
   const [formExpiresOn, setFormExpiresOn] = useState("")
 
-  // 필터링 & 정렬된 아이템
-  const filteredItems = useMemo(() => {
-    let result = items
-
-    // 카테고리 필터
-    if (activeCategory !== "all") {
-      result = result.filter((item) => item.category === activeCategory)
-    }
-
-    // 정렬
-    result = [...result].sort((a, b) => {
-      if (sortBy === "expiresOn") {
-        if (!a.expiresOn) return 1
-        if (!b.expiresOn) return -1
-        return a.expiresOn.localeCompare(b.expiresOn)
-      } else {
-        return b.updatedAt.localeCompare(a.updatedAt)
+  useEffect(() => {
+    const unsubscribe = onAuthChange((user) => {
+      if (!user) {
+        setUserId(null)
+        setAuthLoading(false)
+        router.replace("/login")
+        return
       }
+
+      setUserId(user.uid)
+      setAuthLoading(false)
     })
 
-    return result
-  }, [items, activeCategory, sortBy])
+    return () => unsubscribe()
+  }, [router])
 
-  // 폼 초기화
+  const loadItems = async (uid: string, category: FridgeCategory | "all", sort: "expiresOn" | "updatedAt") => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const params = new URLSearchParams()
+      if (category !== "all") params.set("category", category)
+      params.set("sort", sort)
+
+      const response = await fetch(`/api/fridge?${params.toString()}`, {
+        headers: { "x-user-id": uid },
+      })
+
+      if (!response.ok) {
+        throw new Error("냉장고 데이터를 불러오지 못했습니다")
+      }
+
+      const data = (await response.json()) as FridgeListResponse
+      setItems(data.items)
+    } catch {
+      setItems([])
+      setError("냉장고 데이터를 불러오지 못했습니다")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!userId) return
+    void loadItems(userId, activeCategory, sortBy)
+  }, [userId, activeCategory, sortBy])
+
   const resetForm = () => {
     setFormName("")
     setFormCategory("other")
@@ -88,7 +87,6 @@ export default function FridgePage() {
     setEditingItem(null)
   }
 
-  // 추가/수정 모달 열기
   const openAddModal = () => {
     resetForm()
     setShowAddModal(true)
@@ -97,67 +95,95 @@ export default function FridgePage() {
   const openEditModal = (item: FridgeItem) => {
     setFormName(item.name)
     setFormCategory(item.category)
-    setFormAmount(item.amount.toString())
+    setFormAmount(String(item.amount))
     setFormUnit(item.unit)
-    setFormExpiresOn(item.expiresOn || "")
+    setFormExpiresOn(item.expiresOn ?? "")
     setEditingItem(item)
     setShowAddModal(true)
   }
 
-  // 추가/수정 처리
-  const handleSubmit = () => {
-    const amount = parseFloat(formAmount)
-    if (!formName.trim() || isNaN(amount) || amount <= 0) {
+  const handleSubmit = async () => {
+    if (!userId || saving) return
+
+    const amount = Number.parseFloat(formAmount)
+    if (!formName.trim() || Number.isNaN(amount) || amount <= 0) {
       alert("재료명과 수량을 올바르게 입력해주세요")
       return
     }
 
-    const now = new Date().toISOString()
+    setSaving(true)
 
-    if (editingItem) {
-      // 수정
-      setItems(items.map((item) =>
-        item.id === editingItem.id
-          ? {
-              ...item,
-              name: formName.trim(),
-              category: formCategory,
-              amount,
-              unit: formUnit,
-              expiresOn: formExpiresOn || undefined,
-              updatedAt: now,
-            }
-          : item
-      ))
-    } else {
-      // 추가
-      const newItem: FridgeItem = {
-        id: Date.now().toString(),
-        name: formName.trim(),
-        category: formCategory,
-        amount,
-        unit: formUnit,
-        expiresOn: formExpiresOn || undefined,
-        createdAt: now,
-        updatedAt: now,
+    try {
+      if (editingItem) {
+        const response = await fetch(`/api/fridge/${editingItem.id}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-id": userId,
+          },
+          body: JSON.stringify({
+            name: formName.trim(),
+            category: formCategory,
+            amount,
+            unit: formUnit,
+            expiresOn: formExpiresOn || null,
+          }),
+        })
+
+        if (!response.ok) {
+          throw new Error("재료 수정에 실패했습니다")
+        }
+      } else {
+        const response = await fetch("/api/fridge", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-id": userId,
+          },
+          body: JSON.stringify({
+            name: formName.trim(),
+            category: formCategory,
+            amount,
+            unit: formUnit,
+            expiresOn: formExpiresOn || undefined,
+          }),
+        })
+
+        if (!response.ok) {
+          throw new Error("재료 추가에 실패했습니다")
+        }
       }
-      setItems([...items, newItem])
-    }
 
-    setShowAddModal(false)
-    resetForm()
-    // TODO: Firestore에 저장
-  }
-
-  // 삭제
-  const handleDelete = (id: string) => {
-    if (confirm("이 재료를 삭제하시겠습니까?")) {
-      setItems(items.filter((item) => item.id !== id))
-      // TODO: Firestore에서 삭제
+      setShowAddModal(false)
+      resetForm()
+      await loadItems(userId, activeCategory, sortBy)
+    } catch {
+      alert(editingItem ? "재료 수정에 실패했습니다" : "재료 추가에 실패했습니다")
+    } finally {
+      setSaving(false)
     }
   }
 
-  // 빠른 추가 (추천 재료)
+  const handleDelete = async (id: string) => {
+    if (!userId) return
+    if (!confirm("이 재료를 삭제하시겠습니까?")) return
+
+    try {
+      const response = await fetch(`/api/fridge/${id}`, {
+        method: "DELETE",
+        headers: { "x-user-id": userId },
+      })
+
+      if (!response.ok) {
+        throw new Error("삭제 실패")
+      }
+
+      await loadItems(userId, activeCategory, sortBy)
+    } catch {
+      alert("재료 삭제에 실패했습니다")
+    }
+  }
+
   const handleQuickAdd = (name: string, category: FridgeCategory) => {
     setFormName(name)
     setFormCategory(category)
@@ -168,7 +194,6 @@ export default function FridgePage() {
     setShowAddModal(true)
   }
 
-  // 바로 추천받기
   const handleQuickStart = () => {
     if (items.length === 0) {
       alert("냉장고에 재료를 먼저 추가해주세요")
@@ -182,8 +207,7 @@ export default function FridgePage() {
     router.push(`/quick?${params.toString()}`)
   }
 
-  // 유통기한 D-day 계산
-  const getDday = (expiresOn?: string) => {
+  const getDday = (expiresOn?: string | null) => {
     if (!expiresOn) return null
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -191,6 +215,17 @@ export default function FridgePage() {
     const diff = Math.floor((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
     return diff
   }
+
+  const filteredItems = useMemo(() => {
+    if (sortBy === "expiresOn") {
+      return [...items].sort((a, b) => {
+        if (!a.expiresOn) return 1
+        if (!b.expiresOn) return -1
+        return a.expiresOn.localeCompare(b.expiresOn)
+      })
+    }
+    return [...items].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  }, [items, sortBy])
 
   return (
     <div className="min-h-screen bg-dc-bg">
@@ -202,8 +237,6 @@ export default function FridgePage() {
         <div className="flex-1 bg-dc-side border-r border-dc-border hidden lg:block" />
 
         <main className="w-full lg:w-[960px] lg:flex-none px-5 lg:px-10 py-5 lg:py-12 pb-nav-safe lg:pb-12">
-          
-          {/* 페이지 헤더 */}
           <header className="mb-5 lg:mb-6 flex items-end justify-between">
             <div>
               <h1 className="text-dc-text text-[22px] lg:text-[28px] font-bold flex items-center gap-2">
@@ -216,14 +249,14 @@ export default function FridgePage() {
             </div>
             <button
               onClick={openAddModal}
-              className="h-11 px-5 bg-dc-primary text-white text-[13px] font-semibold rounded-xl hover:bg-[#2d6b45] transition-colors flex items-center gap-1.5"
+              disabled={authLoading || !userId}
+              className="h-11 px-5 bg-dc-primary text-white text-[13px] font-semibold rounded-xl hover:bg-[#2d6b45] transition-colors flex items-center gap-1.5 disabled:opacity-60"
             >
               <span className="text-base">+</span>
               추가
             </button>
           </header>
 
-          {/* 카테고리 탭 */}
           <section className="mb-4">
             <div className="flex gap-2 overflow-x-auto pb-1 -mx-5 px-5 lg:mx-0 lg:px-0">
               <button
@@ -256,7 +289,6 @@ export default function FridgePage() {
             </div>
           </section>
 
-          {/* 정렬 & 바로추천 */}
           <section className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-dc-text-secondary text-[12px]">정렬:</span>
@@ -292,27 +324,27 @@ export default function FridgePage() {
             )}
           </section>
 
-          {/* 재료 목록 */}
+          {error ? <p className="text-red-600 text-[13px] mb-3">{error}</p> : null}
+          {loading ? <p className="text-dc-text-secondary text-[13px] mb-3">냉장고 데이터를 불러오는 중...</p> : null}
+
           <section className="space-y-3">
-            {filteredItems.length > 0 ? (
+            {!loading && filteredItems.length > 0 ? (
               filteredItems.map((item) => {
                 const dday = getDday(item.expiresOn)
                 const isExpiringSoon = dday !== null && dday <= 3
                 const isExpired = dday !== null && dday < 0
                 const category = CATEGORIES.find((c) => c.id === item.category)
-                const unitLabel = UNITS.find((u) => u.id === item.unit)?.label || item.unit
+                const label = UNITS.find((u) => u.id === item.unit)?.label || item.unit
 
                 return (
                   <div
                     key={item.id}
                     className="bg-dc-surface rounded-2xl border border-dc-border p-4 flex items-center gap-4"
                   >
-                    {/* 카테고리 아이콘 */}
                     <div className="w-12 h-12 rounded-xl bg-dc-muted flex items-center justify-center text-2xl flex-none">
                       {category?.icon || "📦"}
                     </div>
 
-                    {/* 재료 정보 */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-dc-text text-[15px] font-bold truncate">{item.name}</p>
@@ -329,17 +361,15 @@ export default function FridgePage() {
                       </div>
                       <div className="flex items-center gap-3 mt-1">
                         <span className="text-dc-text-secondary text-[13px]">
-                          {item.amount}{unitLabel}
+                          {item.amount}
+                          {label}
                         </span>
                         {item.expiresOn && (
-                          <span className="text-dc-text-muted text-[12px]">
-                            ~ {item.expiresOn}
-                          </span>
+                          <span className="text-dc-text-muted text-[12px]">~ {item.expiresOn}</span>
                         )}
                       </div>
                     </div>
 
-                    {/* 버튼 */}
                     <div className="flex gap-2 flex-none">
                       <button
                         onClick={() => openEditModal(item)}
@@ -357,12 +387,10 @@ export default function FridgePage() {
                   </div>
                 )
               })
-            ) : (
+            ) : !loading ? (
               <div className="bg-dc-surface rounded-2xl border border-dc-border p-8 text-center">
                 <p className="text-dc-text-secondary text-[14px] mb-3">
-                  {activeCategory === "all"
-                    ? "냉장고가 비어있어요"
-                    : "이 카테고리에 재료가 없어요"}
+                  {activeCategory === "all" ? "냉장고가 비어있어요" : "이 카테고리에 재료가 없어요"}
                 </p>
                 <button
                   onClick={openAddModal}
@@ -371,10 +399,9 @@ export default function FridgePage() {
                   재료 추가하기
                 </button>
               </div>
-            )}
+            ) : null}
           </section>
 
-          {/* 추천 재료 (전체 탭일 때만) */}
           {activeCategory === "all" && (
             <section className="mt-6 bg-dc-surface rounded-2xl border border-dc-border p-5">
               <h3 className="text-dc-text text-[15px] font-bold mb-3">빠른 추가</h3>
@@ -406,22 +433,17 @@ export default function FridgePage() {
         <div className="flex-1 bg-dc-side border-l border-dc-border hidden lg:block" />
       </div>
 
-      {/* 추가/수정 모달 */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/30 z-[100] flex items-end lg:items-center justify-center">
           <div
             className="bg-dc-surface w-full lg:w-[480px] lg:rounded-2xl rounded-t-3xl p-6 lg:p-8 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* 핸들바 (모바일) */}
             <div className="lg:hidden w-10 h-1 bg-dc-border rounded-full mx-auto mb-4" />
 
-            <h2 className="text-dc-text text-[18px] font-bold mb-5">
-              {editingItem ? "재료 수정" : "재료 추가"}
-            </h2>
+            <h2 className="text-dc-text text-[18px] font-bold mb-5">{editingItem ? "재료 수정" : "재료 추가"}</h2>
 
             <div className="space-y-4">
-              {/* 재료명 */}
               <div>
                 <label className="text-dc-text text-[13px] font-semibold block mb-2">
                   재료명 <span className="text-red-500">*</span>
@@ -435,20 +457,15 @@ export default function FridgePage() {
                 />
               </div>
 
-              {/* 카테고리 */}
               <div>
-                <label className="text-dc-text text-[13px] font-semibold block mb-2">
-                  카테고리
-                </label>
+                <label className="text-dc-text text-[13px] font-semibold block mb-2">카테고리</label>
                 <div className="grid grid-cols-3 gap-2">
                   {CATEGORIES.map((cat) => (
                     <button
                       key={cat.id}
                       onClick={() => setFormCategory(cat.id)}
                       className={`h-11 rounded-xl text-[13px] font-medium transition-colors flex items-center justify-center gap-1.5 ${
-                        formCategory === cat.id
-                          ? "bg-dc-primary text-white"
-                          : "bg-dc-muted text-dc-text-secondary"
+                        formCategory === cat.id ? "bg-dc-primary text-white" : "bg-dc-muted text-dc-text-secondary"
                       }`}
                     >
                       <span>{cat.icon}</span>
@@ -458,7 +475,6 @@ export default function FridgePage() {
                 </div>
               </div>
 
-              {/* 수량 */}
               <div className="grid grid-cols-[1fr_120px] gap-2">
                 <div>
                   <label className="text-dc-text text-[13px] font-semibold block mb-2">
@@ -475,9 +491,7 @@ export default function FridgePage() {
                   />
                 </div>
                 <div>
-                  <label className="text-dc-text text-[13px] font-semibold block mb-2">
-                    단위
-                  </label>
+                  <label className="text-dc-text text-[13px] font-semibold block mb-2">단위</label>
                   <select
                     value={formUnit}
                     onChange={(e) => setFormUnit(e.target.value as QuantityUnit)}
@@ -492,11 +506,8 @@ export default function FridgePage() {
                 </div>
               </div>
 
-              {/* 유통기한 */}
               <div>
-                <label className="text-dc-text text-[13px] font-semibold block mb-2">
-                  유통기한 (선택)
-                </label>
+                <label className="text-dc-text text-[13px] font-semibold block mb-2">유통기한 (선택)</label>
                 <input
                   type="date"
                   value={formExpiresOn}
@@ -506,7 +517,6 @@ export default function FridgePage() {
               </div>
             </div>
 
-            {/* 버튼 */}
             <div className="flex gap-2 mt-6">
               <button
                 onClick={() => {
@@ -519,9 +529,10 @@ export default function FridgePage() {
               </button>
               <button
                 onClick={handleSubmit}
-                className="flex-1 h-12 bg-dc-primary text-white text-[15px] font-bold rounded-xl hover:bg-[#2d6b45] transition-colors"
+                disabled={saving}
+                className="flex-1 h-12 bg-dc-primary text-white text-[15px] font-bold rounded-xl hover:bg-[#2d6b45] transition-colors disabled:opacity-60"
               >
-                {editingItem ? "수정" : "추가"}
+                {saving ? "저장 중..." : editingItem ? "수정" : "추가"}
               </button>
             </div>
           </div>
