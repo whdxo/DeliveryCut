@@ -1,21 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
 import { NavBar } from "@/components/shared/PageLayout"
-import { onAuthChange } from "@/lib/firebase"
 
 export default function LandingPage() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
-
-  useEffect(() => {
-    const unsubscribe = onAuthChange((user) => {
-      setIsLoggedIn(Boolean(user))
-    })
-
-    return () => unsubscribe()
-  }, [])
-
   return (
     <div className="min-h-screen bg-dc-bg">
       {/* NavBar */}
@@ -65,21 +53,6 @@ export default function LandingPage() {
                   >
                     지금 바로 시작하기 →
                   </Link>
-                  {isLoggedIn ? (
-                    <Link
-                      href="/fridge"
-                      className="h-[52px] px-6 bg-dc-surface text-dc-primary text-[15px] font-semibold rounded-xl border border-dc-primary flex items-center justify-center hover:bg-dc-primary-light transition-colors"
-                    >
-                      냉장고
-                    </Link>
-                  ) : (
-                    <Link
-                      href="/login"
-                      className="h-[52px] px-6 bg-dc-surface text-dc-primary text-[15px] font-semibold rounded-xl border border-dc-primary flex items-center justify-center hover:bg-dc-primary-light transition-colors"
-                    >
-                      로그인하기
-                    </Link>
-                  )}
                 </div>
 
                 {/* Stats */}
@@ -239,3 +212,4 @@ export default function LandingPage() {
     </div>
   )
 }
+

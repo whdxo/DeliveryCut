@@ -66,22 +66,20 @@ export function NavBar({ variant = "app" }: NavBarProps) {
               >
                 로그아웃
               </button>
-            ) : (
-              <>
-                <Link
-                  href="/login"
-                  className="h-11 px-4 rounded-full bg-dc-muted text-dc-text text-[13px] font-semibold flex items-center justify-center hover:bg-dc-border transition-colors"
-                >
-                  로그인
-                </Link>
-                <Link
-                  href="/home"
-                  className="h-11 px-4 rounded-full bg-dc-primary text-white text-[13px] font-semibold flex items-center justify-center hover:bg-[#2d6b45] transition-colors"
-                >
-                  무료로 시작하기
-                </Link>
-              </>
+                        ) : (
+              <Link
+                href="/login"
+                className="h-11 px-4 rounded-full bg-dc-muted text-dc-text text-[13px] font-semibold flex items-center justify-center hover:bg-dc-border transition-colors"
+              >
+                로그인
+              </Link>
             )}
+            <Link
+              href="/home"
+              className="h-11 px-4 rounded-full bg-dc-primary text-white text-[13px] font-semibold flex items-center justify-center hover:bg-[#2d6b45] transition-colors"
+            >
+              무료로 시작하기
+            </Link>
           </div>
         ) : (
           <div className="hidden lg:flex items-center gap-3">
@@ -168,3 +166,4 @@ export function MobileBottomNav() {
     </div>
   )
 }
+
