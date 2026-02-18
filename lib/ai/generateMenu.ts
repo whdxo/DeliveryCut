@@ -1,68 +1,104 @@
+import OpenAI from "openai"
+import { SYSTEM_PROMPT, RULES_PROMPT, buildUserPrompt } from "./prompts"
 import type { GenerateInput, GenerateOutput } from "@/lib/types/api"
 
-const parseIngredients = (text: string) =>
-  text
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean)
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+})
+
+// OpenAI strict 모드용 스키마 (모든 properties가 required에 포함돼야 함)
+const strictSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["menuOptions", "threeDayPlan", "shoppingList"],
+  properties: {
+    menuOptions: {
+      type: "array",
+      minItems: 3,
+      maxItems: 3,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["optionId", "title", "timeMin", "tools", "ingredients", "steps", "tip", "difficulty", "kcal"],
+        properties: {
+          optionId: { type: "string" },
+          title: { type: "string" },
+          timeMin: { type: "number" },
+          tools: {
+            type: "array",
+            items: { type: "string", enum: ["microwave", "pan", "airfryer"] },
+          },
+          ingredients: {
+            type: "array",
+            items: { type: "string" },
+          },
+          steps: {
+            type: "array",
+            minItems: 3,
+            maxItems: 5,
+            items: { type: "string" },
+          },
+          tip: { type: "string" },
+          difficulty: { type: "string", enum: ["easy", "medium", "hard"] },
+          kcal: { type: "number" },
+        },
+      },
+    },
+    threeDayPlan: {
+      type: "array",
+      minItems: 3,
+      maxItems: 3,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["day", "breakfast", "lunch", "dinner"],
+        properties: {
+          day: { type: "number", enum: [1, 2, 3] },
+          breakfast: { type: "string" },
+          lunch: { type: "string" },
+          dinner: { type: "string" },
+        },
+      },
+    },
+    shoppingList: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["item", "quantity", "unit", "reason"],
+        properties: {
+          item: { type: "string" },
+          quantity: { type: "number" },
+          unit: { type: "string" },
+          reason: { type: "string" },
+        },
+      },
+    },
+  },
+} as const
 
 export const generateMenu = async (input: GenerateInput): Promise<GenerateOutput> => {
-  const ingredients = parseIngredients(input.ingredientsText)
-  const base = ingredients.length > 0 ? ingredients : ["계란", "김치", "두부"]
+  const response = await client.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: RULES_PROMPT },
+      { role: "user", content: buildUserPrompt(input) },
+    ],
+    response_format: {
+      type: "json_schema",
+      json_schema: {
+        name: "menu_generation",
+        strict: true,
+        schema: strictSchema,
+      },
+    },
+    temperature: 0.7,
+    max_tokens: 2500,
+  })
 
-  // TODO(air): OpenAI 연동 전까지는 공용 타입/스키마 검증용 mock 반환
-  return {
-    menuOptions: [
-      {
-        optionId: "option-1",
-        title: `${base[0]} 볶음밥`,
-        timeMin: input.timeLimitMin,
-        tools: [input.tools[0]],
-        ingredients: base.slice(0, 4),
-        steps: [
-          "재료를 손질한다.",
-          "도구에 맞춰 빠르게 조리한다.",
-          "간을 맞춘 뒤 완성한다.",
-        ],
-        tip: "수분 많은 재료는 마지막에 넣으세요.",
-        difficulty: "easy",
-      },
-      {
-        optionId: "option-2",
-        title: `${base[Math.min(1, base.length - 1)]} 덮밥`,
-        timeMin: input.timeLimitMin,
-        tools: input.tools,
-        ingredients: base.slice(0, 5),
-        steps: [
-          "주재료를 먹기 좋게 썬다.",
-          "볶거나 데워서 익힌다.",
-          "밥 위에 올려 마무리한다.",
-        ],
-        tip: "강불 단시간 조리가 식감을 살립니다.",
-      },
-      {
-        optionId: "option-3",
-        title: `${base[Math.min(2, base.length - 1)]} 한그릇`,
-        timeMin: input.timeLimitMin,
-        tools: [input.tools[0]],
-        ingredients: base.slice(0, 4),
-        steps: [
-          "재료를 한 번에 조리 가능한 형태로 준비한다.",
-          "도구에 맞게 5~10분 조리한다.",
-          "간을 맞춘 뒤 담아낸다.",
-        ],
-        tip: "소금은 마지막에 조절하는 게 안전합니다.",
-      },
-    ],
-    threeDayPlan: [
-      { day: 1, breakfast: "계란 토스트", lunch: "김치볶음밥", dinner: "두부 덮밥" },
-      { day: 2, breakfast: "오트밀", lunch: "잔반 볶음", dinner: "원팬 구이" },
-      { day: 3, breakfast: "삶은 계란", lunch: "비빔 한그릇", dinner: "재료 털이 스프" },
-    ],
-    shoppingList: [
-      { item: "대파", quantity: 1, unit: "단", reason: "향 보강" },
-      { item: "간장", quantity: 1, unit: "병" },
-    ],
-    ingredientsUsed: Object.fromEntries(base.map((item) => [item, 1])),
-  }
+  const content = response.choices[0]?.message?.content
+  if (!content) throw new Error("OpenAI returned empty response")
+
+  return JSON.parse(content) as GenerateOutput
 }

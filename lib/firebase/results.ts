@@ -15,9 +15,14 @@ export const saveResult = async (resultId: string, data: SaveResultData) => {
     const now = new Date().toISOString()
 
     // StoredMenuPlan 구조에 맞게 변환하여 저장
+    // Firebase는 undefined 값을 허용하지 않으므로 제거
+    const sanitizedInput = Object.fromEntries(
+        Object.entries(data.input).filter(([, v]) => v !== undefined)
+    ) as GenerateInput
+
     const plan: StoredMenuPlan = {
         resultId,
-        input: data.input,
+        input: sanitizedInput,
         output: data.output,
         userId: data.userId,
         meta: {
