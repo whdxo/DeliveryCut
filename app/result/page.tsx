@@ -2,7 +2,7 @@
 
 import { useState, Suspense, useMemo, useEffect } from "react"
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { NavBar, MobileBottomNav } from "@/components/shared/PageLayout"
 import MenuCard from "@/components/results/MenuCard"
 import RecipeView from "@/components/results/RecipeView"
@@ -63,6 +63,7 @@ function ErrorState({ message }: { message: string }) {
 
 // ─── 메인 컨텐츠 ──────────────────────────────────────────────────────────────
 function ResultContent() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const resultId = searchParams.get("resultId")
 
@@ -75,8 +76,7 @@ function ResultContent() {
   useEffect(() => {
     const fetchData = async () => {
       if (!resultId) {
-        setError("올바르지 않은 접근이에요.")
-        setLoading(false)
+        router.replace("/home")
         return
       }
 
@@ -109,7 +109,7 @@ function ResultContent() {
     }
 
     fetchData()
-  }, [resultId])
+  }, [resultId, router])
 
   const menus = useMemo(() => {
     if (!result) return []
@@ -188,18 +188,20 @@ function ResultContent() {
           {!loading && error && <ErrorState message={error} />}
 
           {/* 정상 */}
-          {!loading && !error && result && recipe && (
+          {!loading && !error && result && (
             <>
               <MenuCard menus={menus} selectedMenu={selectedMenu} onSelect={setSelectedMenu} />
-              <div className="flex flex-col lg:flex-row gap-6">
-                <RecipeView
-                  recipe={recipe}
-                  mealPlan={mealPlan}
-                  activeTab={activeTab}
-                  onTabChange={setActiveTab}
-                />
-                <ShoppingList items={shopping} />
-              </div>
+              {recipe && (
+                <div className="flex flex-col lg:flex-row gap-6">
+                  <RecipeView
+                    recipe={recipe}
+                    mealPlan={mealPlan}
+                    activeTab={activeTab}
+                    onTabChange={setActiveTab}
+                  />
+                  <ShoppingList items={shopping} />
+                </div>
+              )}
             </>
           )}
         </div>

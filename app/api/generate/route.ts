@@ -1,28 +1,12 @@
 import { NextResponse } from "next/server"
 import { generateMenu } from "@/lib/ai/generateMenu"
 import { validateGenerateInput, validateGenerateOutput } from "@/lib/ai/schema"
-import { saveGeneratedPlan } from "@/lib/firebase"
-import type { ApiError, GenerateResponse, StoredMenuPlan } from "@/lib/types/api"
+import { saveResult } from "@/lib/firebase/results"
+import type { ApiError, GenerateResponse } from "@/lib/types/api"
 
 const jsonError = (status: number, code: string, message: string, details?: unknown) => {
   const body: ApiError = { error: { code, message, details } }
   return NextResponse.json(body, { status })
-}
-
-const stripUndefined = <T>(value: T): T => {
-  if (Array.isArray(value)) {
-    return value.map((item) => stripUndefined(item)) as T
-  }
-
-  if (value && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .filter(([, v]) => v !== undefined)
-      .map(([k, v]) => [k, stripUndefined(v)])
-
-    return Object.fromEntries(entries) as T
-  }
-
-  return value
 }
 
 export async function POST(request: Request) {
@@ -53,30 +37,19 @@ export async function POST(request: Request) {
     }
 
     const resultId = crypto.randomUUID()
-    const now = new Date().toISOString()
-
-    const stored: StoredMenuPlan = stripUndefined({
-      resultId,
-      userId: null,
-      input: inputValidation.data,
-      output: outputValidation.data,
-      meta: {
-        source: "mock",
-        model: "mock-v1",
-      },
-      createdAt: now,
-      updatedAt: now,
-    })
-
-    const { error: saveError } = await saveGeneratedPlan(stored)
-    if (saveError) {
-      return jsonError(500, "FIRESTORE_SAVE_FAILED", "Failed to save generated plan", saveError)
-    }
 
     const response: GenerateResponse = {
       resultId,
       output: outputValidation.data,
     }
+
+    // 🔗 Firestore에 저장
+    await saveResult(resultId, {
+      input: inputValidation.data,
+      output: outputValidation.data,
+      createdAt: new Date().toISOString(),
+      userId: null,
+    })
 
     return NextResponse.json(response)
   } catch (error) {
