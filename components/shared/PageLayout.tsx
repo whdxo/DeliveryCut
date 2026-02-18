@@ -1,9 +1,11 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { logOut, onAuthChange } from "@/lib/firebase"
+// ✅ Lucide 아이콘 import
+import { Zap, Calendar, History, User } from "lucide-react"
 
 export function DesktopLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -53,36 +55,33 @@ export function NavBar({ variant = "app" }: NavBarProps) {
           <span className="text-dc-text text-base lg:text-[17px] font-bold">DeliveryCut</span>
         </Link>
 
+        {/* ✅ 수정: 중복 제거, 로그인 상태에 따라 분기 */}
         {variant === "landing" ? (
           <div className="flex items-center gap-2">
             {isLoggedIn ? (
               <button
                 type="button"
                 onClick={handleLogout}
-                className="h-9 px-5 rounded-full bg-dc-muted text-dc-text text-[13px] font-semibold flex items-center justify-center hover:bg-dc-border transition-colors"
+                className="h-11 px-5 rounded-full bg-dc-muted text-dc-text text-[13px] font-semibold flex items-center justify-center hover:bg-dc-border transition-colors"
               >
                 로그아웃
               </button>
             ) : (
-              <Link
-                href="/login"
-                className="h-9 px-5 rounded-full bg-dc-muted text-dc-text text-[13px] font-semibold flex items-center justify-center hover:bg-dc-border transition-colors"
-              >
-                로그인
-              </Link>
+              <>
+                <Link
+                  href="/login"
+                  className="h-11 px-4 rounded-full bg-dc-muted text-dc-text text-[13px] font-semibold flex items-center justify-center hover:bg-dc-border transition-colors"
+                >
+                  로그인
+                </Link>
+                <Link
+                  href="/home"
+                  className="h-11 px-4 rounded-full bg-dc-primary text-white text-[13px] font-semibold flex items-center justify-center hover:bg-[#2d6b45] transition-colors"
+                >
+                  무료로 시작하기
+                </Link>
+              </>
             )}
-            <Link
-              href="/login"
-              className="h-11 px-4 rounded-full bg-dc-muted text-dc-text text-[13px] font-semibold flex items-center justify-center hover:bg-dc-border transition-colors"
-            >
-              로그인
-            </Link>
-            <Link
-              href="/home"
-              className="h-11 px-4 rounded-full bg-dc-primary text-white text-[13px] font-semibold flex items-center justify-center hover:bg-[#2d6b45] transition-colors"
-            >
-              무료로 시작하기
-            </Link>
           </div>
         ) : (
           <div className="hidden lg:flex items-center gap-3">
@@ -116,7 +115,6 @@ export function NavBar({ variant = "app" }: NavBarProps) {
             >
               히스토리
             </Link>
-            {/* ✅ 데스크탑 네비에도 마이페이지 추가 */}
             <Link
               href="/mypage"
               className={`text-[13px] font-medium transition-colors ${
@@ -139,32 +137,34 @@ export function NavBar({ variant = "app" }: NavBarProps) {
 export function MobileBottomNav() {
   const pathname = usePathname()
 
-  // ✅ 4개 탭: 추천, 플랜, 히스토리, 마이페이지
+  // ✅ Lucide 아이콘 사용
   const tabs = [
-    { href: "/quick",   icon: "⚡", label: "추천",      active: pathname === "/quick" || pathname === "/result" },
-    { href: "/planner", icon: "📅", label: "플랜",      active: pathname === "/planner" },
-    { href: "/history", icon: "📋", label: "히스토리",   active: pathname === "/history" },
-    { href: "/mypage",  icon: "👤", label: "마이",      active: pathname === "/mypage" },
+    { href: "/quick",   icon: Zap,      label: "추천",      active: pathname === "/quick" || pathname === "/result" },
+    { href: "/planner", icon: Calendar, label: "플랜",      active: pathname === "/planner" },
+    { href: "/history", icon: History,  label: "히스토리",   active: pathname === "/history" },
+    { href: "/mypage",  icon: User,     label: "마이페이지",      active: pathname === "/mypage" },
   ]
 
   return (
     <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-dc-surface border-t border-dc-border flex z-50 pb-safe">
-      {tabs.map((tab) => (
-        <Link
-          key={tab.href}
-          href={tab.href}
-          className={`flex-1 flex flex-col items-center justify-center gap-[3px] min-h-[56px] pt-2 pb-1 transition-colors ${
-            tab.active ? "text-dc-primary" : "text-dc-text-muted"
-          }`}
-        >
-          {/* 아이콘 22px */}
-          <span className="text-[22px] leading-none">{tab.icon}</span>
-          {/* ✅ 라벨 10px - 4개 탭이라 글자 작게 (마이페이지 → 마이) */}
-          <span className={`text-[10px] ${tab.active ? "font-semibold" : "font-medium"}`}>
-            {tab.label}
-          </span>
-        </Link>
-      ))}
+      {tabs.map((tab) => {
+        const IconComponent = tab.icon
+        return (
+          <Link
+            key={tab.href}
+            href={tab.href}
+            className={`flex-1 flex flex-col items-center justify-center gap-[3px] min-h-[56px] pt-2 pb-1 transition-colors ${
+              tab.active ? "text-dc-primary" : "text-dc-text-muted"
+            }`}
+          >
+            {/* ✅ Lucide 아이콘 렌더링 (22px) */}
+            <IconComponent size={22} strokeWidth={2} />
+            <span className={`text-[10px] ${tab.active ? "font-semibold" : "font-medium"}`}>
+              {tab.label}
+            </span>
+          </Link>
+        )
+      })}
     </div>
   )
 }

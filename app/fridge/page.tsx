@@ -1,0 +1,534 @@
+"use client"
+
+import { useState, useMemo } from "react"
+import { useRouter } from "next/navigation"
+import { NavBar, MobileBottomNav } from "@/components/shared/PageLayout"
+import type { FridgeItem, FridgeCategory, QuantityUnit } from "@/lib/types/fridge"
+import { CATEGORIES, UNITS, INGREDIENT_SUGGESTIONS } from "@/lib/types/fridge"
+
+export default function FridgePage() {
+  const router = useRouter()
+  
+  // TODO: Firestore에서 가져와야 함
+  const [items, setItems] = useState<FridgeItem[]>([
+    {
+      id: "1",
+      name: "계란",
+      category: "processed",
+      amount: 10,
+      unit: "count",
+      expiresOn: "2026-02-25",
+      createdAt: "2026-02-17T00:00:00Z",
+      updatedAt: "2026-02-17T00:00:00Z",
+    },
+    {
+      id: "2",
+      name: "김치",
+      category: "vegetable",
+      amount: 500,
+      unit: "g",
+      expiresOn: "2026-02-20",
+      createdAt: "2026-02-17T00:00:00Z",
+      updatedAt: "2026-02-17T00:00:00Z",
+    },
+    {
+      id: "3",
+      name: "두부",
+      category: "processed",
+      amount: 1,
+      unit: "pack",
+      expiresOn: "2026-02-19",
+      createdAt: "2026-02-17T00:00:00Z",
+      updatedAt: "2026-02-17T00:00:00Z",
+    },
+  ])
+
+  const [activeCategory, setActiveCategory] = useState<FridgeCategory | "all">("all")
+  const [sortBy, setSortBy] = useState<"expiresOn" | "updatedAt">("expiresOn")
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [editingItem, setEditingItem] = useState<FridgeItem | null>(null)
+
+  // 폼 상태
+  const [formName, setFormName] = useState("")
+  const [formCategory, setFormCategory] = useState<FridgeCategory>("other")
+  const [formAmount, setFormAmount] = useState("")
+  const [formUnit, setFormUnit] = useState<QuantityUnit>("count")
+  const [formExpiresOn, setFormExpiresOn] = useState("")
+
+  // 필터링 & 정렬된 아이템
+  const filteredItems = useMemo(() => {
+    let result = items
+
+    // 카테고리 필터
+    if (activeCategory !== "all") {
+      result = result.filter((item) => item.category === activeCategory)
+    }
+
+    // 정렬
+    result = [...result].sort((a, b) => {
+      if (sortBy === "expiresOn") {
+        if (!a.expiresOn) return 1
+        if (!b.expiresOn) return -1
+        return a.expiresOn.localeCompare(b.expiresOn)
+      } else {
+        return b.updatedAt.localeCompare(a.updatedAt)
+      }
+    })
+
+    return result
+  }, [items, activeCategory, sortBy])
+
+  // 폼 초기화
+  const resetForm = () => {
+    setFormName("")
+    setFormCategory("other")
+    setFormAmount("")
+    setFormUnit("count")
+    setFormExpiresOn("")
+    setEditingItem(null)
+  }
+
+  // 추가/수정 모달 열기
+  const openAddModal = () => {
+    resetForm()
+    setShowAddModal(true)
+  }
+
+  const openEditModal = (item: FridgeItem) => {
+    setFormName(item.name)
+    setFormCategory(item.category)
+    setFormAmount(item.amount.toString())
+    setFormUnit(item.unit)
+    setFormExpiresOn(item.expiresOn || "")
+    setEditingItem(item)
+    setShowAddModal(true)
+  }
+
+  // 추가/수정 처리
+  const handleSubmit = () => {
+    const amount = parseFloat(formAmount)
+    if (!formName.trim() || isNaN(amount) || amount <= 0) {
+      alert("재료명과 수량을 올바르게 입력해주세요")
+      return
+    }
+
+    const now = new Date().toISOString()
+
+    if (editingItem) {
+      // 수정
+      setItems(items.map((item) =>
+        item.id === editingItem.id
+          ? {
+              ...item,
+              name: formName.trim(),
+              category: formCategory,
+              amount,
+              unit: formUnit,
+              expiresOn: formExpiresOn || undefined,
+              updatedAt: now,
+            }
+          : item
+      ))
+    } else {
+      // 추가
+      const newItem: FridgeItem = {
+        id: Date.now().toString(),
+        name: formName.trim(),
+        category: formCategory,
+        amount,
+        unit: formUnit,
+        expiresOn: formExpiresOn || undefined,
+        createdAt: now,
+        updatedAt: now,
+      }
+      setItems([...items, newItem])
+    }
+
+    setShowAddModal(false)
+    resetForm()
+    // TODO: Firestore에 저장
+  }
+
+  // 삭제
+  const handleDelete = (id: string) => {
+    if (confirm("이 재료를 삭제하시겠습니까?")) {
+      setItems(items.filter((item) => item.id !== id))
+      // TODO: Firestore에서 삭제
+    }
+  }
+
+  // 빠른 추가 (추천 재료)
+  const handleQuickAdd = (name: string, category: FridgeCategory) => {
+    setFormName(name)
+    setFormCategory(category)
+    setFormAmount("1")
+    setFormUnit("count")
+    setFormExpiresOn("")
+    setEditingItem(null)
+    setShowAddModal(true)
+  }
+
+  // 바로 추천받기
+  const handleQuickStart = () => {
+    if (items.length === 0) {
+      alert("냉장고에 재료를 먼저 추가해주세요")
+      return
+    }
+    const ingredientsStr = items.map((item) => `${item.name} ${item.amount}${item.unit}`).join(", ")
+    const params = new URLSearchParams({
+      ingredients: ingredientsStr,
+      mode: "quick",
+    })
+    router.push(`/quick?${params.toString()}`)
+  }
+
+  // 유통기한 D-day 계산
+  const getDday = (expiresOn?: string) => {
+    if (!expiresOn) return null
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const expiry = new Date(expiresOn)
+    const diff = Math.floor((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+    return diff
+  }
+
+  return (
+    <div className="min-h-screen bg-dc-bg">
+      <div className="sticky top-0 z-50 w-full border-b border-dc-border bg-dc-surface">
+        <NavBar variant="app" />
+      </div>
+
+      <div className="flex w-full min-h-[calc(100vh-3.5rem)] lg:min-h-[calc(100vh-4rem)]">
+        <div className="flex-1 bg-dc-side border-r border-dc-border hidden lg:block" />
+
+        <main className="w-full lg:w-[960px] lg:flex-none px-5 lg:px-10 py-5 lg:py-12 pb-nav-safe lg:pb-12">
+          
+          {/* 페이지 헤더 */}
+          <header className="mb-5 lg:mb-6 flex items-end justify-between">
+            <div>
+              <h1 className="text-dc-text text-[22px] lg:text-[28px] font-bold flex items-center gap-2">
+                <span>🧊</span>
+                내 냉장고
+              </h1>
+              <p className="mt-1.5 text-dc-text-secondary text-[13px] lg:text-sm leading-relaxed">
+                재료를 등록하고 관리해보세요
+              </p>
+            </div>
+            <button
+              onClick={openAddModal}
+              className="h-11 px-5 bg-dc-primary text-white text-[13px] font-semibold rounded-xl hover:bg-[#2d6b45] transition-colors flex items-center gap-1.5"
+            >
+              <span className="text-base">+</span>
+              추가
+            </button>
+          </header>
+
+          {/* 카테고리 탭 */}
+          <section className="mb-4">
+            <div className="flex gap-2 overflow-x-auto pb-1 -mx-5 px-5 lg:mx-0 lg:px-0">
+              <button
+                onClick={() => setActiveCategory("all")}
+                className={`flex-none h-11 px-4 rounded-full text-[13px] font-medium transition-colors whitespace-nowrap ${
+                  activeCategory === "all"
+                    ? "bg-dc-primary text-white"
+                    : "bg-dc-muted text-dc-text-secondary hover:bg-dc-border"
+                }`}
+              >
+                전체 ({items.length})
+              </button>
+              {CATEGORIES.map((cat) => {
+                const count = items.filter((item) => item.category === cat.id).length
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => setActiveCategory(cat.id)}
+                    className={`flex-none h-11 px-4 rounded-full text-[13px] font-medium transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+                      activeCategory === cat.id
+                        ? "bg-dc-primary text-white"
+                        : "bg-dc-muted text-dc-text-secondary hover:bg-dc-border"
+                    }`}
+                  >
+                    <span>{cat.icon}</span>
+                    {cat.label} ({count})
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+
+          {/* 정렬 & 바로추천 */}
+          <section className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-dc-text-secondary text-[12px]">정렬:</span>
+              <button
+                onClick={() => setSortBy("expiresOn")}
+                className={`h-9 px-3 rounded-lg text-[12px] font-medium transition-colors ${
+                  sortBy === "expiresOn"
+                    ? "bg-dc-primary text-white"
+                    : "bg-dc-muted text-dc-text-secondary"
+                }`}
+              >
+                유통기한순
+              </button>
+              <button
+                onClick={() => setSortBy("updatedAt")}
+                className={`h-9 px-3 rounded-lg text-[12px] font-medium transition-colors ${
+                  sortBy === "updatedAt"
+                    ? "bg-dc-primary text-white"
+                    : "bg-dc-muted text-dc-text-secondary"
+                }`}
+              >
+                최신순
+              </button>
+            </div>
+            {items.length > 0 && (
+              <button
+                onClick={handleQuickStart}
+                className="h-9 px-4 bg-dc-primary text-white text-[12px] font-semibold rounded-lg hover:bg-[#2d6b45] transition-colors flex items-center gap-1"
+              >
+                <span>⚡</span>
+                바로 추천받기
+              </button>
+            )}
+          </section>
+
+          {/* 재료 목록 */}
+          <section className="space-y-3">
+            {filteredItems.length > 0 ? (
+              filteredItems.map((item) => {
+                const dday = getDday(item.expiresOn)
+                const isExpiringSoon = dday !== null && dday <= 3
+                const isExpired = dday !== null && dday < 0
+                const category = CATEGORIES.find((c) => c.id === item.category)
+                const unitLabel = UNITS.find((u) => u.id === item.unit)?.label || item.unit
+
+                return (
+                  <div
+                    key={item.id}
+                    className="bg-dc-surface rounded-2xl border border-dc-border p-4 flex items-center gap-4"
+                  >
+                    {/* 카테고리 아이콘 */}
+                    <div className="w-12 h-12 rounded-xl bg-dc-muted flex items-center justify-center text-2xl flex-none">
+                      {category?.icon || "📦"}
+                    </div>
+
+                    {/* 재료 정보 */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-dc-text text-[15px] font-bold truncate">{item.name}</p>
+                        {isExpired && (
+                          <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
+                            만료
+                          </span>
+                        )}
+                        {!isExpired && isExpiringSoon && (
+                          <span className="text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full">
+                            D-{dday}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="text-dc-text-secondary text-[13px]">
+                          {item.amount}{unitLabel}
+                        </span>
+                        {item.expiresOn && (
+                          <span className="text-dc-text-muted text-[12px]">
+                            ~ {item.expiresOn}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 버튼 */}
+                    <div className="flex gap-2 flex-none">
+                      <button
+                        onClick={() => openEditModal(item)}
+                        className="w-9 h-9 bg-dc-muted rounded-lg text-dc-text-secondary text-[13px] font-medium hover:bg-dc-border transition-colors flex items-center justify-center"
+                      >
+                        ✎
+                      </button>
+                      <button
+                        onClick={() => handleDelete(item.id)}
+                        className="w-9 h-9 bg-dc-muted rounded-lg text-dc-text-secondary text-[13px] font-medium hover:bg-red-50 hover:text-red-600 transition-colors flex items-center justify-center"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
+                )
+              })
+            ) : (
+              <div className="bg-dc-surface rounded-2xl border border-dc-border p-8 text-center">
+                <p className="text-dc-text-secondary text-[14px] mb-3">
+                  {activeCategory === "all"
+                    ? "냉장고가 비어있어요"
+                    : "이 카테고리에 재료가 없어요"}
+                </p>
+                <button
+                  onClick={openAddModal}
+                  className="h-11 px-5 bg-dc-primary text-white text-[13px] font-semibold rounded-xl hover:bg-[#2d6b45] transition-colors"
+                >
+                  재료 추가하기
+                </button>
+              </div>
+            )}
+          </section>
+
+          {/* 추천 재료 (전체 탭일 때만) */}
+          {activeCategory === "all" && (
+            <section className="mt-6 bg-dc-surface rounded-2xl border border-dc-border p-5">
+              <h3 className="text-dc-text text-[15px] font-bold mb-3">빠른 추가</h3>
+              <div className="space-y-3">
+                {CATEGORIES.map((cat) => (
+                  <div key={cat.id}>
+                    <p className="text-dc-text-secondary text-[12px] font-semibold mb-2 flex items-center gap-1.5">
+                      <span>{cat.icon}</span>
+                      {cat.label}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {INGREDIENT_SUGGESTIONS[cat.id].slice(0, 5).map((name) => (
+                        <button
+                          key={name}
+                          onClick={() => handleQuickAdd(name, cat.id)}
+                          className="h-9 px-3 bg-dc-muted text-dc-text-secondary text-[12px] font-medium rounded-full hover:bg-dc-primary hover:text-white transition-colors"
+                        >
+                          + {name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </main>
+
+        <div className="flex-1 bg-dc-side border-l border-dc-border hidden lg:block" />
+      </div>
+
+      {/* 추가/수정 모달 */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/30 z-[100] flex items-end lg:items-center justify-center">
+          <div
+            className="bg-dc-surface w-full lg:w-[480px] lg:rounded-2xl rounded-t-3xl p-6 lg:p-8 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 핸들바 (모바일) */}
+            <div className="lg:hidden w-10 h-1 bg-dc-border rounded-full mx-auto mb-4" />
+
+            <h2 className="text-dc-text text-[18px] font-bold mb-5">
+              {editingItem ? "재료 수정" : "재료 추가"}
+            </h2>
+
+            <div className="space-y-4">
+              {/* 재료명 */}
+              <div>
+                <label className="text-dc-text text-[13px] font-semibold block mb-2">
+                  재료명 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
+                  placeholder="예) 계란"
+                  className="w-full h-11 px-4 bg-dc-muted rounded-xl text-dc-text text-[15px] placeholder:text-dc-text-muted focus:outline-none focus:ring-1 focus:ring-dc-primary border border-transparent focus:border-dc-primary transition-colors"
+                />
+              </div>
+
+              {/* 카테고리 */}
+              <div>
+                <label className="text-dc-text text-[13px] font-semibold block mb-2">
+                  카테고리
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {CATEGORIES.map((cat) => (
+                    <button
+                      key={cat.id}
+                      onClick={() => setFormCategory(cat.id)}
+                      className={`h-11 rounded-xl text-[13px] font-medium transition-colors flex items-center justify-center gap-1.5 ${
+                        formCategory === cat.id
+                          ? "bg-dc-primary text-white"
+                          : "bg-dc-muted text-dc-text-secondary"
+                      }`}
+                    >
+                      <span>{cat.icon}</span>
+                      {cat.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 수량 */}
+              <div className="grid grid-cols-[1fr_120px] gap-2">
+                <div>
+                  <label className="text-dc-text text-[13px] font-semibold block mb-2">
+                    수량 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    value={formAmount}
+                    onChange={(e) => setFormAmount(e.target.value)}
+                    placeholder="10"
+                    className="w-full h-11 px-4 bg-dc-muted rounded-xl text-dc-text text-[15px] placeholder:text-dc-text-muted focus:outline-none focus:ring-1 focus:ring-dc-primary border border-transparent focus:border-dc-primary transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="text-dc-text text-[13px] font-semibold block mb-2">
+                    단위
+                  </label>
+                  <select
+                    value={formUnit}
+                    onChange={(e) => setFormUnit(e.target.value as QuantityUnit)}
+                    className="w-full h-11 px-3 bg-dc-muted rounded-xl text-dc-text text-[15px] focus:outline-none focus:ring-1 focus:ring-dc-primary border border-transparent focus:border-dc-primary transition-colors"
+                  >
+                    {UNITS.map((unit) => (
+                      <option key={unit.id} value={unit.id}>
+                        {unit.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* 유통기한 */}
+              <div>
+                <label className="text-dc-text text-[13px] font-semibold block mb-2">
+                  유통기한 (선택)
+                </label>
+                <input
+                  type="date"
+                  value={formExpiresOn}
+                  onChange={(e) => setFormExpiresOn(e.target.value)}
+                  className="w-full h-11 px-4 bg-dc-muted rounded-xl text-dc-text text-[15px] focus:outline-none focus:ring-1 focus:ring-dc-primary border border-transparent focus:border-dc-primary transition-colors"
+                />
+              </div>
+            </div>
+
+            {/* 버튼 */}
+            <div className="flex gap-2 mt-6">
+              <button
+                onClick={() => {
+                  setShowAddModal(false)
+                  resetForm()
+                }}
+                className="flex-1 h-12 bg-dc-muted text-dc-text-secondary text-[15px] font-semibold rounded-xl hover:bg-dc-border transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleSubmit}
+                className="flex-1 h-12 bg-dc-primary text-white text-[15px] font-bold rounded-xl hover:bg-[#2d6b45] transition-colors"
+              >
+                {editingItem ? "수정" : "추가"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <MobileBottomNav />
+    </div>
+  )
+}
