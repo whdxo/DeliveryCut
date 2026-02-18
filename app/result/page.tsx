@@ -89,10 +89,11 @@ function ResultContent() {
           return
         } catch {
           // 파싱 실패 시 API로 fallback
+          console.warn("캐시 파싱 실패, API 조회로 전환")
         }
       }
 
-      // 2️⃣ sessionStorage 없으면 API 조회
+      // 2️⃣ sessionStorage 없거나 파싱 실패 시 API 조회
       setLoading(true)
       try {
         const res = await fetch(`/api/results/${resultId}`)
