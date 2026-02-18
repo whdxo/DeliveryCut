@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 
 interface CopyButtonProps {
     text: string
@@ -11,16 +11,26 @@ export default function CopyButton({ text, label = "복사" }: CopyButtonProps) 
     const [copied, setCopied] = useState(false)
     const [error, setError] = useState(false)
 
+    useEffect(() => {
+        if (!copied && !error) return
+
+        const timer = setTimeout(() => {
+            setCopied(false)
+            setError(false)
+        }, 2000)
+
+        return () => clearTimeout(timer)
+    }, [copied, error])
+
     const handleCopy = async () => {
         try {
             await navigator.clipboard.writeText(text)
             setCopied(true)
             setError(false)
-            setTimeout(() => setCopied(false), 2000)
         } catch (err) {
             console.error("복사 실패:", err)
             setError(true)
-            setTimeout(() => setError(false), 2000)
+            setCopied(false)
         }
     }
 

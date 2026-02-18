@@ -39,12 +39,14 @@ export default function ShoppingList({ items, onRegenerate }: ShoppingListProps)
 
       <div className="flex flex-col gap-2">
         <CopyButton text={shoppingText} label="장보기 목록 복사" />
-        <button
-          onClick={onRegenerate}
-          className="w-full h-11 bg-dc-muted rounded-xl text-dc-text-secondary text-sm font-medium hover:bg-dc-border transition-colors"
-        >
-          다시 생성하기
-        </button>
+        {onRegenerate && (
+          <button
+            onClick={onRegenerate}
+            className="w-full h-11 bg-dc-muted rounded-xl text-dc-text-secondary text-sm font-medium hover:bg-dc-border transition-colors"
+          >
+            다시 생성하기
+          </button>
+        )}
       </div>
     </div>
   )

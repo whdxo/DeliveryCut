@@ -44,12 +44,20 @@ export async function POST(request: Request) {
     }
 
     // 🔗 Firestore에 저장
-    await saveResult(resultId, {
+    const saveResponse = await saveResult(resultId, {
       input: inputValidation.data,
       output: outputValidation.data,
-      createdAt: new Date().toISOString(),
       userId: null,
     })
+
+    if (saveResponse.error) {
+      return jsonError(
+        500,
+        "FIRESTORE_SAVE_FAILED",
+        "Failed to save generated plan to database",
+        saveResponse.error
+      )
+    }
 
     return NextResponse.json(response)
   } catch (error) {
