@@ -1,13 +1,13 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { logOut, onAuthChange } from "@/lib/firebase"
 // ✅ Lucide 아이콘 import
 import { Zap, Calendar, History, User } from "lucide-react"
 
-export function DesktopLayout({ children }: { children: React.ReactNode }) {
+export function DesktopLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex w-full min-h-screen">
       <div className="flex-1 bg-dc-side border-r border-dc-border hidden lg:block" />

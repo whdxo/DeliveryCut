@@ -1,8 +1,21 @@
+"use client"
 
 import Link from "next/link"
+import { useEffect, useState } from "react"
 import { NavBar } from "@/components/shared/PageLayout"
+import { onAuthChange } from "@/lib/firebase"
 
 export default function LandingPage() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+
+  useEffect(() => {
+    const unsubscribe = onAuthChange((user) => {
+      setIsLoggedIn(Boolean(user))
+    })
+
+    return () => unsubscribe()
+  }, [])
+
   return (
     <div className="min-h-screen bg-dc-bg">
       {/* NavBar */}
@@ -31,14 +44,16 @@ export default function LandingPage() {
                     배달비 아깝잖아요.
                   </h1>
                   <h2 className="text-dc-text text-3xl lg:text-5xl font-bold leading-tight">
-                    냉장고 재료로<br />
+                    냉장고 재료로
+                    <br />
                     <span className="text-dc-primary">5분만에</span> 만들어요.
                   </h2>
                 </div>
 
                 {/* Description */}
                 <p className="text-dc-text-secondary text-sm lg:text-base leading-relaxed max-w-md">
-                  있는 재료 입력하면 AI가 딱 맞는 메뉴를 추천해드려요.<br className="hidden lg:block" />
+                  있는 재료 입력하면 AI가 딱 맞는 메뉴를 추천해드려요.
+                  <br className="hidden lg:block" />
                   시간, 도구, 기피 재료까지 고려한 맞춤 레시피.
                 </p>
 
@@ -50,12 +65,21 @@ export default function LandingPage() {
                   >
                     지금 바로 시작하기 →
                   </Link>
-                  <Link
-                    href="/login"
-                    className="h-[52px] px-6 bg-dc-surface text-dc-primary text-[15px] font-semibold rounded-xl border border-dc-primary flex items-center justify-center hover:bg-dc-primary-light transition-colors"
-                  >
-                    로그인하기
-                  </Link>
+                  {isLoggedIn ? (
+                    <Link
+                      href="/fridge"
+                      className="h-[52px] px-6 bg-dc-surface text-dc-primary text-[15px] font-semibold rounded-xl border border-dc-primary flex items-center justify-center hover:bg-dc-primary-light transition-colors"
+                    >
+                      냉장고
+                    </Link>
+                  ) : (
+                    <Link
+                      href="/login"
+                      className="h-[52px] px-6 bg-dc-surface text-dc-primary text-[15px] font-semibold rounded-xl border border-dc-primary flex items-center justify-center hover:bg-dc-primary-light transition-colors"
+                    >
+                      로그인하기
+                    </Link>
+                  )}
                 </div>
 
                 {/* Stats */}
@@ -87,11 +111,15 @@ export default function LandingPage() {
                     ].map((item, i) => (
                       <div
                         key={i}
-                        className={`flex items-center gap-3 p-3 rounded-xl ${i === 0 ? "bg-dc-primary-light" : "bg-dc-muted"
-                          }`}
+                        className={`flex items-center gap-3 p-3 rounded-xl ${
+                          i === 0 ? "bg-dc-primary-light" : "bg-dc-muted"
+                        }`}
                       >
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${i === 0 ? "bg-dc-primary" : "bg-dc-border"
-                          }`}>
+                        <div
+                          className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${
+                            i === 0 ? "bg-dc-primary" : "bg-dc-border"
+                          }`}
+                        >
                           {["🍳", "🍲", "🍝"][i]}
                         </div>
                         <div className="flex-1">
@@ -202,9 +230,7 @@ export default function LandingPage() {
                 </div>
                 <p className="text-dc-text-secondary text-xs">배달 대신, 내 손으로 🍳</p>
               </div>
-              <p className="text-dc-text-secondary text-xs">
-                © 2026 DeliveryCut. All rights reserved.
-              </p>
+              <p className="text-dc-text-secondary text-xs">© 2026 DeliveryCut. All rights reserved.</p>
             </div>
           </div>
           <div className="flex-1 bg-dc-side border-l border-dc-border hidden lg:block" />
