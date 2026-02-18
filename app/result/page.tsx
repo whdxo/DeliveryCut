@@ -73,40 +73,42 @@ function ResultContent() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!resultId) {
-      setError("올바르지 않은 접근이에요.")
-      setLoading(false)
-      return
-    }
-
-    // 1️⃣ sessionStorage 먼저 확인 (빠름)
-    const cached = sessionStorage.getItem(cacheKey(resultId))
-    if (cached) {
-      try {
-        setResult(JSON.parse(cached) as ResultResponse)
+    const fetchData = async () => {
+      if (!resultId) {
+        setError("올바르지 않은 접근이에요.")
         setLoading(false)
         return
-      } catch {
-        // 파싱 실패 시 API로 fallback
+      }
+
+      // 1️⃣ sessionStorage 먼저 확인 (빠름)
+      const cached = sessionStorage.getItem(cacheKey(resultId))
+      if (cached) {
+        try {
+          setResult(JSON.parse(cached) as ResultResponse)
+          setLoading(false)
+          return
+        } catch {
+          // 파싱 실패 시 API로 fallback
+        }
+      }
+
+      // 2️⃣ sessionStorage 없으면 API 조회
+      setLoading(true)
+      try {
+        const res = await fetch(`/api/results/${resultId}`)
+        if (!res.ok) {
+          throw new Error("결과가 만료됐거나 존재하지 않아요.")
+        }
+        const data: ResultResponse = await res.json()
+        setResult(data)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "알 수 없는 오류가 발생했습니다.")
+      } finally {
+        setLoading(false)
       }
     }
 
-    // 2️⃣ sessionStorage 없으면 API 조회
-    setLoading(true)
-    fetch(`/api/results/${resultId}`)
-      .then((res) => {
-        if (!res.ok) throw new Error("결과가 만료됐거나 존재하지 않아요.")
-        return res.json()
-      })
-      .then((data: ResultResponse) => {
-        setResult(data)
-      })
-      .catch((err: Error) => {
-        setError(err.message)
-      })
-      .finally(() => {
-        setLoading(false)
-      })
+    fetchData()
   }, [resultId])
 
   const menus = useMemo(() => {
