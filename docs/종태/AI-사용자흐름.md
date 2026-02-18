@@ -10,26 +10,33 @@
 사용자 입력
     ↓
 홈 화면 (/home)
-    ↓  "배달컷 메뉴 만들기" 버튼 클릭
+    ↓  모드 선택
+    ├── "즉시 한끼" → /quick
+    └── "플랜 생성기" → /planner
+
+/quick 입력 (재료 + 시간 + 도구)
+    ↓  "배달컷 메뉴 추천받기" 버튼 클릭
     ↓
 POST /api/generate
     ↓  입력 검증
     ↓
-generateMenu()  ← 여기만 Mock → OpenAI 교체
+generateMenu()  ← OpenAI gpt-4o-mini (✅ 연동 완료)
     ↓  출력 검증
     ↓
 Firebase 저장 + resultId 발급
     ↓
+sessionStorage 캐시 저장
+    ↓
 결과 화면 (/result?resultId=xxx)
     ↓
-메뉴 3개 카드 / 레시피 / 3일 플랜 / 장보기 목록
+메뉴 3개 카드 / 레시피 / 장보기 / 3일 플랜
 ```
 
 ---
 
-## 1단계 — 사용자 입력 (홈 화면)
+## 1단계 — 사용자 입력 (/quick)
 
-**페이지**: `app/home/page.tsx`
+**페이지**: `app/quick/page.tsx`
 
 사용자가 선택/입력하는 것:
 
@@ -38,16 +45,25 @@ Firebase 저장 + resultId 발급
 | 요리 시간 | 버튼 3개 중 1개 선택 | `5분` / `10분` / `15분` |
 | 조리 도구 | 버튼 멀티 선택 | `전자레인지` / `팬` / `에어프라이어` |
 | 냉장고 재료 | 텍스트 입력 + 태그 버튼 | `"계란, 김치, 두부, 양파"` |
+| 기피 재료 | 텍스트 입력 | `"고수, 땅콩"` (선택) |
 
 버튼 클릭 시 만들어지는 API 페이로드:
 
 ```typescript
-// app/home/page.tsx — handleSubmit()
+// app/quick/page.tsx — handleSubmit()
+
+const TOOL_MAP: Record<string, Tool> = {
+  전자레인지: "microwave",
+  팬: "pan",
+  에어프라이어: "airfryer",
+}
+const TIME_MAP = { "5분": 5, "10분": 10, "15분": 15 }
+
 const payload: GenerateInput = {
-  timeLimitMin: 10,                          // "10분" → 숫자 변환
-  tools: ["microwave", "pan"],               // 한국어 → 영어 변환
-  ingredientsText: "계란, 김치, 두부, 양파", // 그대로 전달
-  // dislikedIngredientsText: 현재 UI 미구현 (홈 화면에 입력 없음)
+  timeLimitMin: TIME_MAP[selectedTime] ?? 10,   // "10분" → 10
+  tools: selectedTools.map(t => TOOL_MAP[t]),   // "팬" → "pan"
+  ingredientsText: "계란, 김치, 두부, 양파",
+  dislikedIngredientsText: "고수",              // 입력 시에만 포함
 }
 ```
 
@@ -59,9 +75,9 @@ const payload: GenerateInput = {
 **파일**: `app/api/generate/route.ts`
 
 ```
-홈 화면
-  → fetch("/api/generate", { method: "POST", body: payload })
-  → 로딩 상태 표시 (isSubmitting = true, 버튼 비활성화)
+/quick 버튼 클릭
+  → isSubmitting = true (버튼 "AI 메뉴 생성 중..." 로딩 표시)
+  → fetch("/api/generate", { method: "POST", body: JSON.stringify(payload) })
   → 응답 대기 (AI 처리 시간: 약 2~5초)
 ```
 
@@ -73,43 +89,38 @@ API 내부에서 일어나는 일:
      timeLimitMin이 5/10/15 중 하나인가
      tools 배열이 비어있지 않은가
      ingredientsText가 빈 값이 아닌가
-3. generateMenu(input)  ← AI 호출 (현재 Mock, 교체 예정)
+3. generateMenu(input)  ← OpenAI API 호출 (✅ 연동 완료)
 4. validateGenerateOutput() — AI 결과 유효성 검사
      menuOptions 정확히 3개인가
      각 메뉴 timeMin ≤ timeLimitMin인가
      steps 3~5개인가
-5. Firebase에 결과 저장
-6. resultId + output 반환
+5. Firebase에 결과 저장 (menuPlans/{resultId})
+6. { resultId, output } 반환
 ```
 
 ---
 
 ## 3단계 — AI 처리 (핵심)
 
-**파일**: `lib/ai/generateMenu.ts`
+**파일**: `lib/ai/generateMenu.ts` + `lib/ai/prompts.ts`
 
-현재 (Mock):
 ```typescript
-// 입력을 받아 하드코딩된 가짜 데이터 반환
-return {
-  menuOptions: [ "계란 볶음밥", "김치 덮밥", "두부 한그릇" ],
-  threeDayPlan: [ ... ],
-  shoppingList: [ ... ],
-}
-```
+// lib/ai/generateMenu.ts — OpenAI gpt-4o-mini Structured Outputs
 
-교체 후 (OpenAI):
-```typescript
-// 입력을 받아 실제 AI가 생성한 데이터 반환
-const response = await openai.chat.completions.create({
+const response = await client.chat.completions.create({
   model: "gpt-4o-mini",
   messages: [
-    { role: "system", content: "현생 요리 플래너 역할 + 출력 규칙" },
-    { role: "system", content: "시간/도구/기피재료 제약 규칙" },
+    { role: "system", content: SYSTEM_PROMPT },   // 현생 요리 플래너 역할
+    { role: "system", content: RULES_PROMPT },    // 시간/도구/기피재료 제약
     { role: "user", content: buildUserPrompt(input) },
-    // 예: "10분, 팬+전자레인지, 재료: 계란 김치 두부 양파로 메뉴 3개 추천해줘"
+    // 예: "10분, 팬, 재료: 계란 김치 두부 양파로 메뉴 3개 추천해줘"
   ],
-  response_format: { type: "json_schema", json_schema: ... },
+  response_format: {
+    type: "json_schema",
+    json_schema: { name: "menu_generation", strict: true, schema: strictSchema },
+  },
+  temperature: 0.7,
+  max_tokens: 2500,
 })
 ```
 
@@ -130,10 +141,11 @@ AI가 만들어 내는 것:
         "간장으로 간 후 밥 위에 올린다"
       ],
       "tip": "두부는 마지막에 넣어야 부서지지 않음",
-      "difficulty": "easy"
+      "difficulty": "easy",
+      "kcal": 400
     },
-    { ... },  // option-2
-    { ... }   // option-3
+    { "optionId": "option-2", "...": "..." },
+    { "optionId": "option-3", "...": "..." }
   ],
   "threeDayPlan": [
     { "day": 1, "breakfast": "계란 토스트", "lunch": "김치볶음밥", "dinner": "두부 덮밥" },
@@ -141,10 +153,8 @@ AI가 만들어 내는 것:
     { "day": 3, "breakfast": "햇반 계란국", "lunch": "비빔 한그릇", "dinner": "재료 털이" }
   ],
   "shoppingList": [
-    { "item": "대파", "quantity": 1, "unit": "단", "reason": "3일 플랜 향 보강" },
-    { "item": "참기름", "quantity": 1, "unit": "병" }
-  ],
-  "ingredientsUsed": { "계란": 1, "김치": 1, "두부": 1, "양파": 1 }
+    { "item": "대파", "quantity": 1, "unit": "단", "reason": "향 보강" }
+  ]
 }
 ```
 
@@ -152,7 +162,7 @@ AI가 만들어 내는 것:
 
 ## 4단계 — 결과 캐시 + 화면 이동
 
-**파일**: `app/home/page.tsx` — handleSubmit()
+**파일**: `app/quick/page.tsx` — handleSubmit()
 
 ```typescript
 // API 응답 받은 후
@@ -179,17 +189,25 @@ router.push(`/result?resultId=${data.resultId}`)
 ```
 URL: /result?resultId=abc123
 
-1. sessionStorage에서 캐시 확인
-   → 있으면 바로 렌더링 (빠름)
-   → 없으면 /api/results/abc123 으로 Firebase 조회
+1. useSearchParams()로 resultId 읽기
+2. sessionStorage에서 캐시 확인
+   → 있으면 바로 렌더링 (빠름, API 호출 없음)
+   → 없으면 GET /api/results/abc123 으로 Firebase 조회
+      (StoredMenuPlan → ResultResponse 변환)
 
-2. 메뉴 선택 카드 3개 표시
-   → 클릭하면 해당 메뉴의 레시피로 전환
+3. 메뉴 선택 카드 3개 표시
+   → 클릭하면 selectedIndex 변경 → 레시피 내용 전환
 
-3. 레시피 탭 / 3일 플랜 탭
-   → 탭 전환으로 내용 변경
+4. 레시피 상세 (재료 목록 + 조리 순서 + 팁)
 
-4. 장보기 목록 사이드바
+5. 액션 버튼
+   → 레시피 더보기: 만개의레시피 검색 (메뉴명 동적)
+   → 유튜브 영상: 유튜브 검색 (메뉴명 동적)
+
+6. 간단 장보기 목록 (AI 생성 shoppingList)
+   → 쿠팡 검색 링크
+
+7. 3일 식단 플랜 (AI 생성 threeDayPlan)
 ```
 
 화면에 표시되는 AI 결과:
@@ -209,14 +227,13 @@ URL: /result?resultId=abc123
   3. 간장으로 간 후 밥 위에 올린다
   💡 두부는 마지막에 넣어야 부서지지 않음
 
-📅 3일 플랜 (탭 전환)
+🛒 장보기 목록
+  대파 1단 (향 보강)
+
+📅 3일 플랜
   1일: 계란토스트 / 김치볶음밥 / 두부덮밥
   2일: 스크램블에그 / 양파볶음 / 원팬찌개
   3일: 햇반계란국 / 비빔한그릇 / 재료털이
-
-🛒 장보기 목록
-  대파 1단 (향 보강)
-  참기름 1병
 ```
 
 ---
@@ -226,42 +243,61 @@ URL: /result?resultId=abc123
 ```
 입력 오류 (재료 미입력)
   → 버튼 비활성화 (disabled)
-  → 홈 화면에서 막힘
+  → "재료를 먼저 입력해주세요" 버튼 텍스트 표시
 
 API 오류 (400/422/500)
-  → 홈 화면에 에러 메시지 표시
-  → 예: "메뉴 생성 중 오류가 발생했습니다."
+  → isSubmitting = false
+  → /quick 화면에 에러 메시지 표시
+  → "메뉴 생성 중 오류가 발생했습니다. 다시 시도해주세요."
 
-AI 스키마 위반 (422 INVALID_AI_OUTPUT)
-  → API가 validateGenerateOutput() 실패 반환
-  → 현재: 에러 표시 (재시도 로직 미구현)
-  → TODO: 자동 1회 재시도 추가 예정
+네트워크 오류
+  → catch 블록에서 에러 메시지 표시
+  → "네트워크 오류가 발생했습니다. 다시 시도해주세요."
+
+결과 페이지 로드 실패
+  → sessionStorage 없음 + Firebase 404
+  → "결과를 불러오지 못했습니다." + "다시 시도하기" 버튼
 ```
 
 ---
 
-## AI 교체 전후 비교
+## 플랜 생성기 흐름 (/planner)
 
-| | Mock (현재) | OpenAI (교체 후) |
-|--|------------|-----------------|
-| 메뉴 | 항상 같은 "볶음밥/덮밥/한그릇" | 재료에 맞는 실제 메뉴 |
-| 재료 | 입력 그대로 나열 | 실제 조합 및 분량 |
-| 레시피 | 3줄 고정 텍스트 | 실제 조리 순서 3~5줄 |
-| 3일 플랜 | 고정 값 | 입력 재료 소진 전략 반영 |
-| 장보기 | 대파/간장 고정 | 부족한 것만 |
-| 응답 시간 | 즉시 | 2~5초 |
+```
+현재 상태: API 연동 없음, 로컬 Mock 데이터만 표시
+
+/planner 입력 (기간, 끼니, 예산, 기피재료)
+  ↓ "플랜 생성하기" 버튼
+setGenerated(true)  ← API 호출 없이 로컬 PLAN_BASE[] 표시
+```
+
+> 플랜 생성 AI 연동은 추후 별도 작업 예정.
+
+---
+
+## 구현 상태 요약
+
+| 항목 | 상태 |
+|------|------|
+| `generateMenu()` Mock → OpenAI | ✅ 완료 |
+| `/quick` → API 호출 | ✅ 완료 |
+| `/result` → AI 데이터 표시 | ✅ 완료 |
+| Firebase 저장 (undefined 필드 수정) | ✅ 완료 |
+| `/planner` AI 연동 | ⏳ 추후 |
 
 ---
 
 ## 주요 파일 위치 요약
 
 ```
-사용자 입력 수집    → app/home/page.tsx (handleSubmit)
+사용자 입력 수집    → app/quick/page.tsx (handleSubmit)
 API 진입점         → app/api/generate/route.ts
 입력 검증          → lib/ai/schema.ts (validateGenerateInput)
-AI 호출            → lib/ai/generateMenu.ts  ← 교체할 파일
+AI 호출            → lib/ai/generateMenu.ts  ✅ OpenAI 연동 완료
+프롬프트           → lib/ai/prompts.ts  ✅ 신규 생성
 출력 검증          → lib/ai/schema.ts (validateGenerateOutput)
-결과 표시          → app/result/page.tsx
+Firebase 저장      → lib/firebase/results.ts (saveResult)
+결과 표시          → app/result/page.tsx  ✅ AI 데이터 연동
 공통 타입          → lib/types/api.ts
 ```
 
