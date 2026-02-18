@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation"
 import { NavBar, MobileBottomNav } from "@/components/shared/PageLayout"
 import { onAuthChange } from "@/lib/firebase"
 import type { FridgeCategory, FridgeItem, FridgeListResponse, QuantityUnit } from "@/lib/types/api"
-import { CATEGORIES, UNITS, INGREDIENT_SUGGESTIONS } from "@/lib/types/fridge"
+import { FRIDGE_CATEGORIES as CATEGORIES, QUANTITY_UNITS as UNITS } from "@/lib/fridge/constants";
+import { INGREDIENT_SUGGESTIONS } from "@/lib/types/fridge" // TODO: This should also be moved to constants
 
 export default function FridgePage() {
   const router = useRouter()
