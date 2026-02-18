@@ -1,247 +1,278 @@
 "use client"
 
-import { useState, Suspense } from "react"
+import { Suspense, useMemo, useState } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { NavBar, MobileBottomNav } from "@/components/shared/PageLayout"
 
-// Mock data — will be replaced with AI API
-const MOCK_MENUS = [
-  { id: 0, name: "계란 볶음밥", tags: ["5분", "팬 하나", "1인분"], selected: true },
-  { id: 1, name: "두부 된장찌개", tags: ["10분", "냄비"], selected: false },
-  { id: 2, name: "전자레인지 찜닭", tags: ["15분", "전자레인지", "1인분"], selected: false },
-]
-
-const MOCK_RECIPE = {
-  name: "계란 볶음밥",
-  ingredients: ["계란 2개", "밥 1공기", "간장(1작은술)", "참기름 1큰술"],
-  steps: [
-    "계란 기름 두르고 후추를 촉촉하게 볶는다",
-    "계란 넣고 스크램블 게 하면 간단하나",
-    "밥을 넣고 빠기 간장, 참기름으로 볶는다",
-    "스크램블 계란 판 넣고 가볍게 다시 무쳐라",
-  ],
+type Menu = {
+  id: number
+  name: string
+  tags: string[]
+  reason: string
+  ingredients: string[]
+  steps: string[]
+  videoUrl: string
+  recipeUrl: string
+  shopping: Array<{ name: string; amount: string }>
 }
 
-const MOCK_MEAL_PLAN = [
-  { day: "월요일", meals: ["계란 볶음밥", "두부찌개", "참치 볶음 스크램블", "두부 정도", "채소 볶음"] },
-  { day: "화요일", meals: ["참치 볶음밥", "콩나물 볶음이", "계란 스크램블도 무방", "스프라이더 계란", "채소 볶음"] },
-  { day: "수요일", meals: ["콩 두부 스크랄빈", "계란 볶음 이상", "이상기도 가능"] },
+const MOCK_MENUS: Menu[] = [
+  {
+    id: 0,
+    name: "참치 김치 덮밥",
+    tags: ["10분", "팬", "1인분"],
+    reason: "입력한 재료와 시간 조건을 가장 잘 만족하는 메뉴입니다.",
+    ingredients: ["참치 1캔", "김치 1/2컵", "밥 1공기", "간장 1스푼"],
+    steps: [
+      "팬에 김치를 2분 정도 볶습니다.",
+      "참치와 간장을 넣고 1분 더 볶습니다.",
+      "밥 위에 올려 마무리합니다.",
+    ],
+    videoUrl: "https://www.youtube.com/results?search_query=참치+김치+덮밥+레시피",
+    recipeUrl: "https://www.10000recipe.com/recipe/list.html?q=참치김치덮밥",
+    shopping: [
+      { name: "참치캔", amount: "1개" },
+      { name: "김치", amount: "1팩" },
+      { name: "간장", amount: "소용량 1병" },
+    ],
+  },
+  {
+    id: 1,
+    name: "계란 두부 스크램블",
+    tags: ["5분", "전자레인지", "1인분"],
+    reason: "조리 시간이 가장 짧고 실패 확률이 낮습니다.",
+    ingredients: ["계란 2개", "두부 1/2모", "소금 약간"],
+    steps: [
+      "두부를 으깨고 계란과 섞습니다.",
+      "전자레인지 2분 가열 후 섞습니다.",
+      "1분 추가 가열 후 간을 맞춥니다.",
+    ],
+    videoUrl: "https://www.youtube.com/results?search_query=계란+두부+스크램블",
+    recipeUrl: "https://www.10000recipe.com/recipe/list.html?q=계란두부스크램블",
+    shopping: [
+      { name: "계란", amount: "10구 1판" },
+      { name: "두부", amount: "1모" },
+    ],
+  },
+  {
+    id: 2,
+    name: "감자 계란국",
+    tags: ["15분", "냄비", "2인분"],
+    reason: "남은 감자 활용도와 포만감이 높은 조합입니다.",
+    ingredients: ["감자 1개", "계란 1개", "대파 약간", "국간장 1스푼"],
+    steps: [
+      "감자를 얇게 썰어 물과 함께 끓입니다.",
+      "국간장으로 간을 맞춥니다.",
+      "계란을 풀어 넣고 대파를 올립니다.",
+    ],
+    videoUrl: "https://www.youtube.com/results?search_query=감자+계란국+레시피",
+    recipeUrl: "https://www.10000recipe.com/recipe/list.html?q=감자계란국",
+    shopping: [
+      { name: "감자", amount: "2개" },
+      { name: "대파", amount: "1단" },
+      { name: "국간장", amount: "소용량 1병" },
+    ],
+  },
 ]
 
-const MOCK_SHOPPING = [
-  { name: "계란", amount: "4개" },
-  { name: "두부", amount: "반모" },
-  { name: "참기름", amount: "적당량" },
-  { name: "달걀노른자", amount: "200g" },
-  { name: "된장", amount: "적당" },
-  { name: "대파", amount: "약간" },
-]
+function getCoupangUrl(keyword: string) {
+  return `https://www.coupang.com/np/search?q=${encodeURIComponent(keyword)}`
+}
 
 function ResultContent() {
+  const searchParams = useSearchParams()
   const [selectedMenu, setSelectedMenu] = useState(0)
-  const [activeTab, setActiveTab] = useState<"recipe" | "plan">("recipe")
+  const selected = MOCK_MENUS[selectedMenu]
+
+  const summary = useMemo(() => {
+    const time = searchParams.get("time") || "10분"
+    const tools = searchParams.get("tools") || "팬"
+    const ingredients = searchParams.get("ingredients") || "입력 재료 없음"
+    return { time, tools, ingredients }
+  }, [searchParams])
 
   return (
     <div className="min-h-screen bg-dc-bg">
-      {/* NavBar */}
+      {/* 헤더 */}
       <div className="sticky top-0 z-50 w-full border-b border-dc-border bg-dc-surface">
-        {/* Mobile back nav */}
+        {/* ✅ 모바일 전용 결과 헤더: h-14(56px) */}
         <div className="lg:hidden flex items-center justify-between h-14 px-5 bg-dc-surface">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
+            {/* ✅ 뒤로가기 터치 영역 44×44px */}
             <Link
-              href="/home"
-              className="w-8 h-8 bg-dc-muted rounded-lg flex items-center justify-center text-dc-text-secondary text-lg"
+              href="/quick"
+              className="w-11 h-11 bg-dc-muted rounded-xl flex items-center justify-center text-dc-text-secondary text-lg"
             >
               ←
             </Link>
-            <span className="text-dc-text text-base font-bold">추천 결과</span>
+            <span className="text-dc-text text-[15px] font-bold">추천 결과</span>
           </div>
+          {/* ✅ 다시입력 버튼 터치 영역 44px */}
           <Link
-            href="/home"
-            className="h-8 px-3 bg-dc-muted rounded-lg text-dc-text-secondary text-xs font-medium flex items-center"
+            href="/quick"
+            className="h-11 px-4 bg-dc-muted rounded-xl text-dc-text-secondary text-[13px] font-medium flex items-center"
           >
-            다시 만들기
+            다시 입력
           </Link>
         </div>
-        {/* Desktop nav */}
         <div className="hidden lg:block">
           <NavBar variant="app" />
         </div>
       </div>
 
-      {/* Body */}
-      <div className="flex w-full">
+      <div className="flex w-full min-h-[calc(100vh-3.5rem)] lg:min-h-[calc(100vh-4rem)]">
         <div className="flex-1 bg-dc-side border-r border-dc-border hidden lg:block" />
 
-        <div className="w-full lg:w-[960px] lg:flex-none px-5 lg:px-10 py-6 lg:py-12 flex flex-col gap-6 lg:gap-8 pb-24 lg:pb-12">
+        {/*
+          ✅ 모바일 패딩: px-5(20px) py-4(16px)
+          ✅ 하단: pb-nav-safe (네비 56px + safe area)
+        */}
+        <main className="w-full lg:w-[960px] lg:flex-none px-5 lg:px-10 py-4 lg:py-12 flex flex-col gap-4 lg:gap-6 pb-nav-safe lg:pb-12">
 
-          {/* Page header - desktop only */}
-          <div className="hidden lg:flex flex-col gap-1">
-            <h1 className="text-dc-text text-[28px] font-bold">오늘의 추천 메뉴</h1>
-            <p className="text-dc-text-secondary text-sm">
-              메뉴를 선택하면 레시피와 장보기 목록을 볼 수 있어요
+          {/* 입력 요약 */}
+          <section className="bg-dc-surface border border-dc-border rounded-2xl p-4 lg:p-5">
+            <p className="text-dc-text text-[13px] font-semibold">입력 요약</p>
+            <p className="text-dc-text-secondary text-[12px] lg:text-xs mt-1.5 leading-relaxed">
+              시간: {summary.time} · 도구: {summary.tools}
             </p>
-          </div>
+            <p className="text-dc-text-secondary text-[12px] lg:text-xs mt-0.5 leading-relaxed">
+              재료: {summary.ingredients}
+            </p>
+          </section>
 
-          {/* Mobile: Page header */}
-          <div className="lg:hidden flex flex-col gap-1">
-            <h1 className="text-dc-text text-xl font-bold">오늘의 추천 메뉴</h1>
-            <p className="text-dc-text-secondary text-xs">메뉴를 선택하면 레시피를 볼 수 있어요</p>
-          </div>
+          {/* 메뉴 선택 */}
+          <section className="flex flex-col gap-3">
+            {/* ✅ 섹션 제목: 모바일 18px / 데스크탑 28px */}
+            <h1 className="text-dc-text text-[18px] lg:text-[28px] font-bold">추천 메뉴 3가지</h1>
 
-          {/* Menu Selection */}
-          <div className="flex flex-col gap-3">
-            <div className="text-dc-text text-sm lg:text-base font-semibold">📋 메뉴 선택</div>
-
-            {/* Desktop: 3-col grid */}
-            <div className="hidden lg:grid grid-cols-3 gap-4">
+            {/*
+              ✅ 모바일: 가로 스크롤 snap
+                - flex + overflow-x-auto
+                - 카드 w-[180px]: 375px 화면에서 2.1개 보여 "더 있음" 암시
+              ✅ 데스크탑: 3열 그리드
+            */}
+            <div className="flex gap-3 overflow-x-auto pb-1 snap-x snap-mandatory scroll-smooth -mx-5 px-5 lg:mx-0 lg:px-0 lg:grid lg:grid-cols-3 lg:overflow-visible lg:pb-0">
               {MOCK_MENUS.map((menu) => (
                 <button
                   key={menu.id}
                   onClick={() => setSelectedMenu(menu.id)}
-                  className={`p-5 rounded-2xl border text-left transition-all ${
-                    selectedMenu === menu.id
-                      ? "border-dc-primary bg-dc-primary-light"
-                      : "border-dc-border bg-dc-surface hover:border-dc-primary/50"
-                  }`}
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="text-dc-text text-sm font-bold">{menu.name}</div>
-                    {selectedMenu === menu.id && (
-                      <span className="text-[10px] font-bold bg-dc-primary text-white px-2 py-0.5 rounded-full">선택됨</span>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {menu.tags.map((tag) => (
-                      <span key={tag} className="text-xs text-dc-text-secondary bg-dc-muted px-2 py-0.5 rounded-full">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </button>
-              ))}
-            </div>
-
-            {/* Mobile: list */}
-            <div className="lg:hidden flex flex-col gap-2">
-              {MOCK_MENUS.map((menu) => (
-                <button
-                  key={menu.id}
-                  onClick={() => setSelectedMenu(menu.id)}
-                  className={`w-full flex items-center justify-between p-4 rounded-xl border transition-all text-left ${
+                  className={`flex-none w-[180px] lg:w-auto snap-start p-4 rounded-2xl border text-left transition-all ${
                     selectedMenu === menu.id
                       ? "border-dc-primary bg-dc-primary-light"
                       : "border-dc-border bg-dc-surface"
                   }`}
                 >
-                  <div>
-                    <div className="text-dc-text text-sm font-semibold">{menu.name}</div>
-                    <div className="text-dc-text-secondary text-xs mt-0.5">{menu.tags.join(" · ")}</div>
-                  </div>
-                  <span className="text-dc-text-secondary">→</span>
+                  <p className="text-dc-text text-[14px] font-bold leading-snug">{menu.name}</p>
+                  <p className="text-dc-text-secondary text-[12px] mt-1">{menu.tags.join(" · ")}</p>
+                  {selectedMenu === menu.id && (
+                    <span className="mt-2 inline-block text-[11px] font-bold text-dc-primary">✓ 선택됨</span>
+                  )}
                 </button>
               ))}
             </div>
-          </div>
+          </section>
 
-          {/* Main Content: Recipe + Shopping */}
-          <div className="flex flex-col lg:flex-row gap-6">
-            {/* Left: Recipe */}
-            <div className="flex-1 bg-dc-surface rounded-2xl border border-dc-border p-5 lg:p-6 flex flex-col gap-4">
-              <div className="flex items-center gap-3 flex-wrap">
-                <h2 className="text-dc-text text-base lg:text-lg font-bold">
-                  🍳 {MOCK_RECIPE.name} — 레시피
-                </h2>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setActiveTab("recipe")}
-                    className={`h-7 px-3 rounded-full text-xs font-medium transition-colors ${
-                      activeTab === "recipe" ? "bg-dc-primary text-white" : "bg-dc-muted text-dc-text-secondary"
-                    }`}
-                  >
-                    레시피
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("plan")}
-                    className={`h-7 px-3 rounded-full text-xs font-medium transition-colors ${
-                      activeTab === "plan" ? "bg-dc-primary text-white" : "bg-dc-muted text-dc-text-secondary"
-                    }`}
-                  >
-                    3일 플랜
-                  </button>
+          {/*
+            ✅ 모바일: 장보기 먼저(위), 레시피 아래 → flex-col-reverse
+            ✅ 데스크탑: 레시피 왼쪽, 장보기 오른쪽 → grid
+          */}
+          <section className="flex flex-col-reverse gap-4 lg:gap-6 lg:grid lg:grid-cols-[1fr_280px]">
+
+            {/* 레시피 상세 */}
+            <article className="bg-dc-surface rounded-2xl border border-dc-border p-5 lg:p-6">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  {/* ✅ 메뉴명: 모바일 17px / 데스크탑 18px */}
+                  <h2 className="text-dc-text text-[17px] lg:text-lg font-bold">{selected.name}</h2>
+                  {/* ✅ 설명: 13px, 줄간격 1.6 */}
+                  <p className="text-dc-text-secondary text-[13px] mt-1.5 leading-relaxed">{selected.reason}</p>
                 </div>
-              </div>
-
-              {activeTab === "recipe" && (
-                <>
-                  {/* Ingredients */}
-                  <div className="flex flex-col gap-2">
-                    <div className="text-dc-text text-sm font-semibold">재료</div>
-                    <div className="flex flex-col gap-1.5">
-                      {MOCK_RECIPE.ingredients.map((ing, i) => (
-                        <div key={i} className="flex items-center gap-2 text-dc-text-secondary text-sm">
-                          <span className="text-dc-primary">✦</span>
-                          {ing}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="h-px bg-dc-border" />
-
-                  {/* Steps */}
-                  <div className="flex flex-col gap-2">
-                    <div className="text-dc-text text-sm font-semibold">조리 순서</div>
-                    <ol className="flex flex-col gap-2">
-                      {MOCK_RECIPE.steps.map((step, i) => (
-                        <li key={i} className="flex gap-3 text-sm">
-                          <span className="w-5 h-5 rounded-full bg-dc-primary text-white text-[11px] font-bold flex items-center justify-center flex-none mt-0.5">
-                            {i + 1}
-                          </span>
-                          <span className="text-dc-text-secondary leading-relaxed">{step}</span>
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
-                </>
-              )}
-
-              {activeTab === "plan" && (
-                <div className="flex flex-col gap-3">
-                  {MOCK_MEAL_PLAN.map((day, i) => (
-                    <div key={i} className="flex flex-col gap-1">
-                      <div className="text-dc-text text-xs font-semibold">{day.day}</div>
-                      <div className="text-dc-text-secondary text-xs leading-relaxed">
-                        {day.meals.join(" · ")}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Right: Shopping List */}
-            <div className="lg:w-[280px] lg:flex-none bg-dc-surface rounded-2xl border border-dc-border p-5 lg:p-6 flex flex-col gap-4">
-              <div className="flex items-center gap-2">
-                <h2 className="text-dc-text text-base font-bold">🛒 장보기 목록</h2>
-                <span className="text-[10px] font-semibold text-dc-primary bg-dc-primary-light px-2 py-0.5 rounded-full">
-                  AI 추천
+                <span className="text-[11px] font-semibold bg-dc-primary-light text-dc-primary px-2.5 py-1 rounded-full whitespace-nowrap flex-none">
+                  선택됨
                 </span>
               </div>
-              <div className="flex flex-col gap-2">
-                {MOCK_SHOPPING.map((item, i) => (
-                  <div key={i} className="flex items-center justify-between">
-                    <span className="text-dc-text text-sm">{item.name}</span>
-                    <span className="text-dc-text-secondary text-xs">{item.amount}</span>
+
+              {/* 재료 */}
+              <div className="mt-5">
+                <p className="text-dc-text text-[13px] font-semibold">재료</p>
+                <ul className="mt-2 space-y-1.5">
+                  {selected.ingredients.map((item) => (
+                    <li key={item} className="text-dc-text-secondary text-[14px] leading-relaxed flex gap-1.5">
+                      <span className="text-dc-text-muted">-</span>
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="h-px bg-dc-border my-5" />
+
+              {/* 조리 순서 */}
+              <div>
+                <p className="text-dc-text text-[13px] font-semibold">조리 순서</p>
+                <ol className="mt-2 space-y-2.5">
+                  {selected.steps.map((step, index) => (
+                    <li key={step} className="flex gap-2.5">
+                      <span className="text-dc-primary text-[14px] font-bold flex-none">{index + 1}.</span>
+                      {/* ✅ 레시피 본문: 14px, 줄간격 1.7 */}
+                      <span className="text-dc-text-secondary text-[14px] leading-[1.7]">{step}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+
+              {/* 액션 버튼들 */}
+              <div className="mt-6 flex flex-col sm:flex-row gap-2">
+                {/* ✅ 버튼 h-11(44px) 터치 영역 */}
+                <a
+                  href={selected.recipeUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="h-11 px-4 rounded-xl bg-dc-primary text-white text-[13px] font-semibold flex items-center justify-center hover:bg-[#2d6b45] transition-colors"
+                >
+                  레시피 더보기
+                </a>
+                <a
+                  href={selected.videoUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="h-11 px-4 rounded-xl bg-dc-muted text-dc-text-secondary text-[13px] font-semibold flex items-center justify-center hover:bg-dc-border transition-colors"
+                >
+                  유튜브 영상 보기
+                </a>
+              </div>
+            </article>
+
+            {/* 장보기 (모바일에서 레시피 위에 표시) */}
+            <aside className="bg-dc-surface rounded-2xl border border-dc-border p-5 lg:p-6">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-dc-text text-[15px] font-bold">간단 장보기</h2>
+                <span className="text-[10px] font-semibold text-dc-primary bg-dc-primary-light px-2 py-0.5 rounded-full">
+                  quick
+                </span>
+              </div>
+              <div className="divide-y divide-dc-border">
+                {selected.shopping.map((item) => (
+                  // ✅ 장보기 아이템 min-h-[44px] 터치 영역
+                  <div key={item.name} className="flex items-center justify-between min-h-[44px]">
+                    <span className="text-dc-text text-[14px]">{item.name}</span>
+                    <span className="text-dc-text-secondary text-[12px]">{item.amount}</span>
                   </div>
                 ))}
               </div>
-              <button className="w-full h-11 bg-dc-muted rounded-xl text-dc-text-secondary text-sm font-medium hover:bg-dc-border transition-colors">
-                다시 생성하기
-              </button>
-            </div>
-          </div>
-        </div>
+              {/* ✅ 버튼 h-11(44px) */}
+              <a
+                href={getCoupangUrl(selected.shopping[0]?.name ?? selected.name)}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-4 h-11 rounded-xl bg-dc-muted text-dc-text-secondary text-[13px] font-semibold flex items-center justify-center hover:bg-dc-border transition-colors"
+              >
+                이 메뉴 재료 구매 검색
+              </a>
+            </aside>
+          </section>
+        </main>
 
         <div className="flex-1 bg-dc-side border-l border-dc-border hidden lg:block" />
       </div>
@@ -253,7 +284,13 @@ function ResultContent() {
 
 export default function ResultPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-dc-bg flex items-center justify-center text-dc-text-secondary">로딩 중...</div>}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-dc-bg flex items-center justify-center text-dc-text-secondary text-sm">
+          로딩 중...
+        </div>
+      }
+    >
       <ResultContent />
     </Suspense>
   )
