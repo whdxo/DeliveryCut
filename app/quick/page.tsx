@@ -17,8 +17,6 @@ import type {
 
 const TIME_OPTIONS = ["5분", "10분", "15분"]
 const TOOL_OPTIONS = ["전자레인지", "팬", "에어프라이어"]
-const INGREDIENT_TAGS = ["계란", "두부", "김치", "참치", "감자", "양파"]
-
 const TOOL_MAP: Record<string, Tool> = {
   전자레인지: "microwave",
   팬: "pan",
@@ -214,17 +212,6 @@ export default function QuickPage() {
                   placeholder="예) 계란, 두부, 김치"
                   className="w-full h-28 lg:h-24 px-4 py-3 bg-dc-muted rounded-xl text-dc-text text-[15px] placeholder:text-dc-text-muted resize-none focus:outline-none focus:ring-1 focus:ring-dc-primary border border-transparent focus:border-dc-primary transition-colors leading-relaxed"
                 />
-                <div className="flex flex-wrap gap-2">
-                  {INGREDIENT_TAGS.map((tag) => (
-                    <button
-                      key={tag}
-                      onClick={() => appendIngredient(tag)}
-                      className="h-11 px-4 rounded-full bg-dc-muted text-dc-text-secondary text-[13px] font-medium hover:bg-dc-border transition-colors"
-                    >
-                      + {tag}
-                    </button>
-                  ))}
-                </div>
 
                 {fridgeItems.length > 0 ? (
                   <div className="pt-1 flex flex-col gap-2">
@@ -306,3 +293,4 @@ export default function QuickPage() {
     </div>
   )
 }
+
