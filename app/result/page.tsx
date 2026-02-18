@@ -4,6 +4,10 @@ import { Suspense, useMemo, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { NavBar, MobileBottomNav } from "@/components/shared/PageLayout"
+import MenuCard from "@/components/results/MenuCard"
+import RecipeView from "@/components/results/RecipeView"
+import ShoppingList from "@/components/results/ShoppingList"
+import type { MenuOption, ResultResponse, Tool } from "@/lib/types/api"
 
 type Menu = {
   id: number
@@ -80,6 +84,7 @@ function getCoupangUrl(keyword: string) {
   return `https://www.coupang.com/np/search?q=${encodeURIComponent(keyword)}`
 }
 
+// ─── 메인 컨텐츠 ──────────────────────────────────────────────────────────────
 function ResultContent() {
   const searchParams = useSearchParams()
   const [selectedMenu, setSelectedMenu] = useState(0)

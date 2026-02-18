@@ -18,6 +18,14 @@ const FEATURE_CARDS = [
   },
 ]
 
+const cacheKey = (resultId: string) => `deliverycut:result:${resultId}`
+
+const toTool = (tool: string): Tool => {
+  if (tool === "전자레인지") return "microwave"
+  if (tool === "팬") return "pan"
+  return "airfryer"
+}
+
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-dc-bg">

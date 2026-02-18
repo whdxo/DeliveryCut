@@ -6,7 +6,7 @@
 export { default as app, auth, db } from "./config"
 
 // Authentication 함수들
-export { signUp, signIn, logOut, onAuthChange } from "./auth"
+export { signUp, signIn, signInWithGoogle, logOut, onAuthChange } from "./auth"
 
 // Firestore 함수들
 export {
@@ -16,6 +16,8 @@ export {
   updateDocument,
   deleteDocument,
   getDocuments,
+  saveGeneratedPlan,
+  getGeneratedPlanById,
   saveMenuPlan,
   getUserMenuPlans,
 } from "./firestore"
