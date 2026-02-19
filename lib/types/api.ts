@@ -2,12 +2,21 @@ export type TimeLimitMin = 5 | 10 | 15
 export type Tool = "microwave" | "pan" | "airfryer"
 export type Difficulty = "easy" | "medium" | "hard"
 
+export interface FridgeContextItem {
+  name: string
+  amount: number
+  unit: QuantityUnit
+  daysLeft?: number | null
+}
+
 export interface GenerateInput {
   timeLimitMin: TimeLimitMin
   tools: Tool[]
   ingredientsText: string
   dislikedIngredientsText?: string
   userId?: string | null
+  fridgeContext?: FridgeContextItem[]
+  recentMenus?: string[]
 }
 
 export interface MenuOption {
@@ -151,4 +160,46 @@ export interface FoodSearchResponse {
   items: FoodSearchItem[]
 }
 
+// ─── Planner ─────────────────────────────────────────────────────────────────
 
+export interface PlannerInput {
+  days: 3 | 7
+  mealsPerDay: 1 | 2 | 3
+  budget?: number
+  fridgeIngredients?: string
+  dislikedIngredientsText?: string
+  userId?: string | null
+}
+
+export interface PlannerMeal {
+  name: string
+  timeMin: number
+  ingredients: string[]
+  isLeftover: boolean
+}
+
+export interface PlannerDayPlan {
+  day: number
+  meals: PlannerMeal[]
+}
+
+export interface PlannerOutput {
+  dayPlans: PlannerDayPlan[]
+  shoppingList: ShoppingItem[]
+  totalEstimatedCost: number
+  cookingTips: string[]
+}
+
+export interface PlannerResponse {
+  planId: string
+  output: PlannerOutput
+}
+
+export interface StoredPlannerPlan {
+  planId: string
+  userId?: string | null
+  input: PlannerInput
+  output: PlannerOutput
+  createdAt: string
+  updatedAt: string
+}

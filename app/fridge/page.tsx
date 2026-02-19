@@ -301,6 +301,19 @@ export default function FridgePage() {
     return diff
   }
 
+  // D-3 이하 유통기한 임박 재료
+  const urgentItems = useMemo(() => {
+    return items.filter((item) => {
+      const d = getDday(item.expiresOn)
+      return d !== null && d <= 3
+    }).sort((a, b) => (getDday(a.expiresOn) ?? 999) - (getDday(b.expiresOn) ?? 999))
+  }, [items])
+
+  const handleUrgentBanner = () => {
+    const names = urgentItems.map((i) => i.name).join(",")
+    router.push(`/quick?ingredients=${encodeURIComponent(names)}&urgent=true`)
+  }
+
   const filteredItems = useMemo(() => {
     const base = activeCategory === "all"
       ? [...items]
@@ -327,6 +340,31 @@ export default function FridgePage() {
         <div className="flex-1 bg-dc-side border-r border-dc-border hidden lg:block" />
 
         <main className="w-full lg:w-[960px] lg:flex-none px-5 lg:px-10 py-5 lg:py-12 pb-nav-safe lg:pb-12">
+          {/* 유통기한 임박 배너 */}
+          {urgentItems.length > 0 && (
+            <button
+              type="button"
+              onClick={handleUrgentBanner}
+              className="w-full mb-4 flex items-center justify-between gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-2xl text-left hover:bg-amber-100 transition-colors"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="relative flex h-2.5 w-2.5 flex-none">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-400" />
+                </span>
+                <span className="text-amber-800 text-[13px] font-semibold truncate">
+                  {urgentItems.map((i) => {
+                    const d = getDday(i.expiresOn)
+                    return `${i.name}(D-${d})`
+                  }).join(", ")} 빨리 써야 해요!
+                </span>
+              </div>
+              <span className="flex-none text-amber-700 text-[12px] font-semibold whitespace-nowrap">
+                지금 추천받기 →
+              </span>
+            </button>
+          )}
+
           <header className="mb-5 lg:mb-6 flex items-end justify-between">
             <div>
               <h1 className="text-dc-text text-[22px] lg:text-[28px] font-bold flex items-center gap-2">
