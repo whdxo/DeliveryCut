@@ -24,6 +24,7 @@ import type {
   FoodSearchItem,
   QuantityUnit,
   StoredMenuPlan,
+  StoredPlannerPlan,
 } from "@/lib/types/api"
 import { convertUnit } from "@/lib/fridge/unit"
 import { db } from "./config"
@@ -31,6 +32,7 @@ import { db } from "./config"
 export const collections = {
   users: "users",
   menuPlans: "menuPlans",
+  plannerPlans: "plannerPlans",
   ingredients: "ingredients",
   fridgeItems: "fridgeItems",
   consumptionLogs: "consumptionLogs",
@@ -117,6 +119,30 @@ export const getGeneratedPlanById = async (resultId: string) => {
     }
 
     return { data: docSnap.data() as StoredMenuPlan, error: null }
+  } catch (error: any) {
+    return { data: null, error: error.message }
+  }
+}
+
+export const savePlannerPlan = async (plan: StoredPlannerPlan) => {
+  try {
+    await setDoc(doc(db, collections.plannerPlans, plan.planId), plan)
+    return { id: plan.planId, error: null }
+  } catch (error: any) {
+    return { id: null, error: error.message }
+  }
+}
+
+export const getPlannerPlan = async (planId: string) => {
+  try {
+    const docRef = doc(db, collections.plannerPlans, planId)
+    const docSnap = await getDoc(docRef)
+
+    if (!docSnap.exists()) {
+      return { data: null, error: "Document not found" }
+    }
+
+    return { data: docSnap.data() as StoredPlannerPlan, error: null }
   } catch (error: any) {
     return { data: null, error: error.message }
   }

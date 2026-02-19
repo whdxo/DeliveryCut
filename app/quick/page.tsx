@@ -8,6 +8,7 @@ import { onAuthChange } from "@/lib/firebase"
 import { unitLabel } from "@/lib/fridge/constants"
 import type {
   ApiError,
+  FridgeContextItem,
   FridgeItem,
   FridgeListResponse,
   GenerateInput,
@@ -175,6 +176,7 @@ export default function QuickPage() {
   const warnItems = sortedFridge.filter(
     (i) => i.expiresOn && getDaysLeft(i.expiresOn) > EXPIRY_URGENT_DAYS && getDaysLeft(i.expiresOn) <= EXPIRY_WARN_DAYS
   )
+  void warnItems // UI 미사용이지만 향후 확장 예정
 
   const toggleTool = (t: string) =>
     setSelectedTools((p) => p.includes(t) ? p.filter((x) => x !== t) : [...p, t])
@@ -197,11 +199,23 @@ export default function QuickPage() {
     setIsSubmitting(true)
     setError("")
 
+    // 입력된 재료명과 냉장고 아이템을 매칭해서 fridgeContext 생성
+    const inputNames = ingredients.split(",").map((s) => s.trim().toLowerCase())
+    const fridgeContext: FridgeContextItem[] = fridgeItems
+      .filter((item) => inputNames.some((n) => item.name.toLowerCase().includes(n) || n.includes(item.name.toLowerCase())))
+      .map((item) => ({
+        name: item.name,
+        amount: item.amount,
+        unit: item.unit,
+        daysLeft: item.expiresOn ? getDaysLeft(item.expiresOn) : null,
+      }))
+
     const payload: GenerateInput = {
       timeLimitMin: TIME_MAP[selectedTime] ?? 10,
       tools: selectedTools.map(toTool),
       ingredientsText: ingredients.trim(),
       ...(avoidIngredients.trim() ? { dislikedIngredientsText: avoidIngredients.trim() } : {}),
+      ...(fridgeContext.length > 0 ? { fridgeContext } : {}),
     }
 
     try {

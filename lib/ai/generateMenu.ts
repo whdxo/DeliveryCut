@@ -1,6 +1,6 @@
 import OpenAI from "openai"
-import { SYSTEM_PROMPT, RULES_PROMPT, buildUserPrompt } from "./prompts"
-import type { GenerateInput, GenerateOutput } from "@/lib/types/api"
+import { SYSTEM_PROMPT, RULES_PROMPT, buildUserPrompt, PLANNER_SYSTEM_PROMPT, PLANNER_RULES_PROMPT, buildPlannerUserPrompt } from "./prompts"
+import type { GenerateInput, GenerateOutput, PlannerInput, PlannerOutput } from "@/lib/types/api"
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -76,6 +76,82 @@ const strictSchema = {
     },
   },
 } as const
+
+// Planner strict 스키마
+const plannerStrictSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["dayPlans", "shoppingList", "totalEstimatedCost", "cookingTips"],
+  properties: {
+    dayPlans: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["day", "meals"],
+        properties: {
+          day: { type: "number" },
+          meals: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["name", "timeMin", "ingredients", "isLeftover"],
+              properties: {
+                name: { type: "string" },
+                timeMin: { type: "number" },
+                ingredients: { type: "array", items: { type: "string" } },
+                isLeftover: { type: "boolean" },
+              },
+            },
+          },
+        },
+      },
+    },
+    shoppingList: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["item", "quantity", "unit", "reason"],
+        properties: {
+          item: { type: "string" },
+          quantity: { type: "number" },
+          unit: { type: "string" },
+          reason: { type: "string" },
+        },
+      },
+    },
+    totalEstimatedCost: { type: "number" },
+    cookingTips: { type: "array", items: { type: "string" } },
+  },
+} as const
+
+export const generatePlan = async (input: PlannerInput): Promise<PlannerOutput> => {
+  const response = await client.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: PLANNER_SYSTEM_PROMPT },
+      { role: "system", content: PLANNER_RULES_PROMPT },
+      { role: "user", content: buildPlannerUserPrompt(input) },
+    ],
+    response_format: {
+      type: "json_schema",
+      json_schema: {
+        name: "planner_generation",
+        strict: true,
+        schema: plannerStrictSchema,
+      },
+    },
+    temperature: 0.7,
+    max_tokens: 4000,
+  })
+
+  const content = response.choices[0]?.message?.content
+  if (!content) throw new Error("OpenAI returned empty response")
+
+  return JSON.parse(content) as PlannerOutput
+}
 
 export const generateMenu = async (input: GenerateInput): Promise<GenerateOutput> => {
   const response = await client.chat.completions.create({
