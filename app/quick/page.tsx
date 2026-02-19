@@ -19,12 +19,13 @@ import type {
 
 // ─── 상수 ────────────────────────────────────────────────────────
 const TIME_OPTIONS = ["5분", "10분", "15분"]
-const TOOL_OPTIONS = ["전자레인지", "팬", "에어프라이어"]
+const TOOL_OPTIONS = ["전자레인지", "팬", "에어프라이어", "냄비"]
 function toTool(tool: string): Tool {
   switch (tool) {
     case "전자레인지": return "microwave"
     case "팬": return "pan"
     case "에어프라이어": return "airfryer"
+    case "냄비": return "pot"
     default: throw new Error(`Unknown tool: ${tool}`)
   }
 }
@@ -503,3 +504,5 @@ export default function QuickPage() {
     </div>
   )
 }
+
+

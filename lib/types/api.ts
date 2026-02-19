@@ -1,5 +1,5 @@
 export type TimeLimitMin = 5 | 10 | 15
-export type Tool = "microwave" | "pan" | "airfryer"
+export type Tool = "microwave" | "pan" | "airfryer" | "pot"
 export type Difficulty = "easy" | "medium" | "hard"
 
 export interface FridgeContextItem {
@@ -203,3 +203,4 @@ export interface StoredPlannerPlan {
   createdAt: string
   updatedAt: string
 }
+

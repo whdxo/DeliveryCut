@@ -26,7 +26,7 @@ const strictSchema = {
           timeMin: { type: "number" },
           tools: {
             type: "array",
-            items: { type: "string", enum: ["microwave", "pan", "airfryer"] },
+            items: { type: "string", enum: ["microwave", "pan", "airfryer", "pot"] },
           },
           ingredients: {
             type: "array",
@@ -178,3 +178,4 @@ export const generateMenu = async (input: GenerateInput): Promise<GenerateOutput
 
   return JSON.parse(content) as GenerateOutput
 }
+

@@ -26,6 +26,7 @@ const toolLabel: Record<Tool, string> = {
   microwave: "전자레인지",
   pan: "팬",
   airfryer: "에어프라이어",
+  pot: "냄비",
 }
 
 function SkeletonCard() {
@@ -489,3 +490,5 @@ export default function ResultPage() {
     </Suspense>
   )
 }
+
+

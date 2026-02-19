@@ -1,6 +1,6 @@
 import type { GenerateInput, GenerateOutput, Tool } from "@/lib/types/api"
 
-const TOOL_VALUES = ["microwave", "pan", "airfryer"] as const
+const TOOL_VALUES = ["microwave", "pan", "airfryer", "pot"] as const
 const TIME_LIMIT_VALUES = [5, 10, 15] as const
 
 export const generateOutputJsonSchema = {
@@ -231,3 +231,4 @@ export const validateGenerateOutput = (
 
   return { valid: true, data: value as GenerateOutput }
 }
+
