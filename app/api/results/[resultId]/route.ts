@@ -3,9 +3,9 @@ import { getResult } from "@/lib/firebase/results"
 
 export async function GET(
   _request: Request,
-  { params }: { params: { resultId: string } }
+  { params }: { params: Promise<{ resultId: string }> }
 ) {
-  const { resultId } = params
+  const { resultId } = await params
 
   if (!resultId) {
     return NextResponse.json(
