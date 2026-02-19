@@ -316,6 +316,19 @@ export default function QuickPage() {
                 </div>
 
                 {/* 냉장고 재료 */}
+                {authUserId && fridgeItems.length === 0 && (
+                  <div className="pt-1 border-t border-dc-border">
+                    <div className="flex items-center gap-2 py-3 px-1">
+                      <Refrigerator size={14} className="text-dc-text-muted flex-none" />
+                      <span className="text-dc-text-muted text-[13px]">
+                        냉장고가 비어있어요.{" "}
+                        <a href="/fridge" className="text-dc-primary font-medium underline underline-offset-2">
+                          재료 추가하기
+                        </a>
+                      </span>
+                    </div>
+                  </div>
+                )}
                 {fridgeItems.length > 0 && (
                   <div className="flex flex-col gap-3 pt-1 border-t border-dc-border">
 

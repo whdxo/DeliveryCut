@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useRef } from "react"
 import { NavBar, MobileBottomNav } from "@/components/shared/PageLayout"
 
 type ShoppingItem = {
@@ -29,6 +29,8 @@ const SHOPPING_BASE: ShoppingItem[] = [
 ]
 
 export default function PlannerPage() {
+  const resultRef = useRef<HTMLDivElement>(null)
+
   const [days, setDays] = useState<3 | 7>(3)
   const [mealsPerDay, setMealsPerDay] = useState<1 | 2 | 3>(2)
   const [budget, setBudget] = useState("30000")
@@ -50,6 +52,13 @@ export default function PlannerPage() {
     }))
   }, [days])
 
+  const handleGenerate = () => {
+    setGenerated(true)
+    setTimeout(() => {
+      resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    }, 100)
+  }
+
   return (
     <div className="min-h-screen bg-dc-bg">
       <div className="sticky top-0 z-50 w-full border-b border-dc-border bg-dc-surface">
@@ -70,6 +79,7 @@ export default function PlannerPage() {
             </p>
           </header>
 
+          {/* 입력 영역 */}
           <section className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
             <div className="bg-dc-surface border border-dc-border rounded-2xl p-5 lg:p-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -132,7 +142,7 @@ export default function PlannerPage() {
               </div>
 
               <button
-                onClick={() => setGenerated(true)}
+                onClick={handleGenerate}
                 className="mt-5 w-full h-[52px] bg-dc-primary text-white text-base font-bold rounded-xl hover:bg-[#2d6b45] transition-colors"
               >
                 플랜 생성하기
@@ -150,50 +160,61 @@ export default function PlannerPage() {
             </aside>
           </section>
 
+          {/* 구분선 + 결과 영역 */}
           {generated && (
-            <section className="mt-6 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
-              <article className="bg-dc-surface border border-dc-border rounded-2xl p-5 lg:p-6">
-                <h2 className="text-dc-text text-base font-bold">일자별 식단</h2>
-                <div className="mt-4 space-y-3">
-                  {plan.map((row) => (
-                    <div key={row.day} className="border border-dc-border rounded-xl p-3">
-                      <p className="text-dc-text text-sm font-semibold">{row.day}</p>
-                      <p className="mt-1 text-dc-text-secondary text-sm">{row.meals.join(" · ")}</p>
-                    </div>
-                  ))}
+            <div ref={resultRef} className="mt-8">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="flex-1 h-px bg-dc-border" />
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-dc-primary-light rounded-full">
+                  <span className="w-1.5 h-1.5 rounded-full bg-dc-primary" />
+                  <span className="text-dc-primary text-[12px] font-bold">생성 완료</span>
                 </div>
-              </article>
+                <div className="flex-1 h-px bg-dc-border" />
+              </div>
 
-              <aside className="bg-dc-surface border border-dc-border rounded-2xl p-5 lg:p-6">
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-dc-text text-base font-bold">통합 장보기</h2>
-                  <span className="text-[10px] font-semibold text-dc-primary bg-dc-primary-light px-2 py-0.5 rounded-full">
-                    표준 스키마
-                  </span>
-                </div>
-                <div className="space-y-2">
-                  {shoppingList.map((item) => (
-                    <div key={item.name} className="rounded-lg bg-dc-muted p-3">
-                      <p className="text-dc-text text-sm font-semibold">
-                        {item.name} {item.quantity}
-                        {item.unit}
-                      </p>
-                      <p className="text-dc-text-secondary text-xs mt-1">
-                        대체키워드: {item.substituteKeywords.join(", ")}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-                <a
-                  href="https://www.coupang.com/np/search?q=장보기"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-4 h-10 rounded-xl bg-dc-primary text-white text-sm font-semibold flex items-center justify-center hover:bg-[#2d6b45] transition-colors"
-                >
-                  쿠팡 검색으로 구매하기
-                </a>
-              </aside>
-            </section>
+              <section className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+                <article className="bg-dc-surface border border-dc-border rounded-2xl p-5 lg:p-6">
+                  <h2 className="text-dc-text text-base font-bold">일자별 식단</h2>
+                  <div className="mt-4 space-y-3">
+                    {plan.map((row) => (
+                      <div key={row.day} className="border border-dc-border rounded-xl p-3">
+                        <p className="text-dc-text text-sm font-semibold">{row.day}</p>
+                        <p className="mt-1 text-dc-text-secondary text-sm">{row.meals.join(" · ")}</p>
+                      </div>
+                    ))}
+                  </div>
+                </article>
+
+                <aside className="bg-dc-surface border border-dc-border rounded-2xl p-5 lg:p-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-dc-text text-base font-bold">통합 장보기</h2>
+                    <span className="text-[10px] font-semibold text-dc-primary bg-dc-primary-light px-2 py-0.5 rounded-full">
+                      표준 스키마
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {shoppingList.map((item) => (
+                      <div key={item.name} className="rounded-lg bg-dc-muted p-3">
+                        <p className="text-dc-text text-sm font-semibold">
+                          {item.name} {item.quantity}{item.unit}
+                        </p>
+                        <p className="text-dc-text-secondary text-xs mt-1">
+                          대체키워드: {item.substituteKeywords.join(", ")}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  <a
+                    href="https://www.coupang.com/np/search?q=장보기"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-4 h-10 rounded-xl bg-dc-primary text-white text-sm font-semibold flex items-center justify-center hover:bg-[#2d6b45] transition-colors"
+                  >
+                    쿠팡 검색으로 구매하기
+                  </a>
+                </aside>
+              </section>
+            </div>
           )}
         </main>
 
