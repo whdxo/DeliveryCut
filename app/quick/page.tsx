@@ -19,10 +19,13 @@ import type {
 // ─── 상수 ────────────────────────────────────────────────────────
 const TIME_OPTIONS = ["5분", "10분", "15분"]
 const TOOL_OPTIONS = ["전자레인지", "팬", "에어프라이어"]
-const TOOL_MAP: Record<string, Tool> = {
-  전자레인지: "microwave",
-  팬: "pan",
-  에어프라이어: "airfryer",
+function toTool(tool: string): Tool {
+  switch (tool) {
+    case "전자레인지": return "microwave"
+    case "팬": return "pan"
+    case "에어프라이어": return "airfryer"
+    default: throw new Error(`Unknown tool: ${tool}`)
+  }
 }
 const TIME_MAP: Record<string, 5 | 10 | 15> = {
   "5분": 5,
@@ -38,7 +41,7 @@ function getDaysLeft(expiresOn: string): number {
   today.setHours(0, 0, 0, 0)
   const exp = new Date(expiresOn)
   exp.setHours(0, 0, 0, 0)
-  return Math.ceil((exp.getTime() - today.getTime()) / 86400000)
+  return Math.ceil((exp.getTime() - today.getTime()) / (24 * 60 * 60 * 1000))
 }
 
 function getExpiryLabel(days: number): string {
@@ -196,7 +199,7 @@ export default function QuickPage() {
 
     const payload: GenerateInput = {
       timeLimitMin: TIME_MAP[selectedTime] ?? 10,
-      tools: selectedTools.map((t) => TOOL_MAP[t]).filter(Boolean) as Tool[],
+      tools: selectedTools.map(toTool),
       ingredientsText: ingredients.trim(),
       ...(avoidIngredients.trim() ? { dislikedIngredientsText: avoidIngredients.trim() } : {}),
     }

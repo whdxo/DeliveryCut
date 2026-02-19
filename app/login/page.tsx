@@ -43,7 +43,7 @@ function LoginForm() {
     const { error: authError } = await signIn(email.trim(), password)
 
     if (authError) {
-      const code = typeof authError === 'string' ? authError : (authError as { code?: string })?.code || "unknown"
+      const code = (authError as { code?: string })?.code ?? "unknown"
       setError(errorMessages[code] || "로그인에 실패했습니다")
       setLoading(false)
       return

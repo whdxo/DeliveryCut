@@ -5,21 +5,29 @@ export async function GET(
     _request: Request,
     { params }: { params: Promise<{ resultId: string }> }
 ) {
-    const { resultId } = await params
+    try {
+        const { resultId } = await params
 
-    if (!resultId) {
+        if (!resultId) {
+            return NextResponse.json(
+                { error: { code: "BAD_REQUEST", message: "resultId is required" } },
+                { status: 400 }
+            )
+        }
+
+        const result = await getResult(resultId)
+        if (!result) {
+            return NextResponse.json(
+                { error: { code: "NOT_FOUND", message: "Result not found" } },
+                { status: 404 }
+            )
+        }
+        return NextResponse.json(result)
+    } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error)
         return NextResponse.json(
-            { error: { code: "BAD_REQUEST", message: "resultId is required" } },
-            { status: 400 }
+            { error: { code: "INTERNAL_ERROR", message: "Failed to fetch result", details: errorMessage } },
+            { status: 500 }
         )
     }
-
-    const result = await getResult(resultId)
-    if (!result) {
-        return NextResponse.json(
-            { error: { code: "NOT_FOUND", message: "Result not found" } },
-            { status: 404 }
-        )
-    }
-    return NextResponse.json(result)
 }
