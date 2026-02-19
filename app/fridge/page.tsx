@@ -4,9 +4,15 @@ import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { NavBar, MobileBottomNav } from "@/components/shared/PageLayout"
 import { onAuthChange } from "@/lib/firebase"
-import type { FridgeCategory, FridgeItem, FridgeListResponse, QuantityUnit } from "@/lib/types/api"
+import type {
+  FoodSearchItem,
+  FoodSearchResponse,
+  FridgeCategory,
+  FridgeItem,
+  FridgeListResponse,
+  QuantityUnit,
+} from "@/lib/types/api"
 import { CATEGORIES, INGREDIENT_SUGGESTIONS, UNITS } from "@/lib/types/fridge"
-
 
 export default function FridgePage() {
   const router = useRouter()
@@ -26,9 +32,23 @@ export default function FridgePage() {
 
   const [formName, setFormName] = useState("")
   const [formCategory, setFormCategory] = useState<FridgeCategory>("other")
-  const [formAmount, setFormAmount] = useState("")
+  const [formAmount, setFormAmount] = useState("1")
   const [formUnit, setFormUnit] = useState<QuantityUnit>("count")
   const [formExpiresOn, setFormExpiresOn] = useState("")
+
+  const [foodSuggestions, setFoodSuggestions] = useState<FoodSearchItem[]>([])
+  const [foodSearchLoading, setFoodSearchLoading] = useState(false)
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1)
+  const [selectedFood, setSelectedFood] = useState<FoodSearchItem | null>(null)
+
+  const resetFoodSuggestions = () => {
+    setFoodSuggestions([])
+    setFoodSearchLoading(false)
+    setShowSuggestions(false)
+    setActiveSuggestionIndex(-1)
+    setSelectedFood(null)
+  }
 
   useEffect(() => {
     const unsubscribe = onAuthChange((user) => {
@@ -46,16 +66,12 @@ export default function FridgePage() {
     return () => unsubscribe()
   }, [router])
 
-  const loadItems = async (uid: string, category: FridgeCategory | "all", sort: "expiresOn" | "updatedAt") => {
+  const loadItems = async (uid: string) => {
     setLoading(true)
     setError(null)
 
     try {
-      const params = new URLSearchParams()
-      if (category !== "all") params.set("category", category)
-      params.set("sort", sort)
-
-      const response = await fetch(`/api/fridge?${params.toString()}`, {
+      const response = await fetch(`/api/fridge`, {
         headers: { "x-user-id": uid },
       })
 
@@ -75,16 +91,65 @@ export default function FridgePage() {
 
   useEffect(() => {
     if (!userId) return
-    void loadItems(userId, activeCategory, sortBy)
-  }, [userId, activeCategory, sortBy])
+    void loadItems(userId)
+  }, [userId])
+
+  useEffect(() => {
+    if (!showAddModal) {
+      resetFoodSuggestions()
+      return
+    }
+
+    const keyword = formName.trim()
+    if (keyword.length < 1) {
+      setFoodSuggestions([])
+      setFoodSearchLoading(false)
+      setActiveSuggestionIndex(-1)
+      return
+    }
+
+    const controller = new AbortController()
+    const timer = setTimeout(async () => {
+      setFoodSearchLoading(true)
+      try {
+        const response = await fetch(`/api/fooddb/search?q=${encodeURIComponent(keyword)}`, {
+          signal: controller.signal,
+        })
+
+        if (!response.ok) {
+          throw new Error("식품 검색 실패")
+        }
+
+        const data = (await response.json()) as FoodSearchResponse
+        setFoodSuggestions(data.items ?? [])
+        setShowSuggestions(true)
+        setActiveSuggestionIndex(-1)
+      } catch {
+        if (!controller.signal.aborted) {
+          setFoodSuggestions([])
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setFoodSearchLoading(false)
+        }
+      }
+    }, 300)
+
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
+  }, [formName, showAddModal])
 
   const resetForm = () => {
     setFormName("")
     setFormCategory("other")
-    setFormAmount("")
+    setFormAmount("1")
     setFormUnit("count")
     setFormExpiresOn("")
     setEditingItem(null)
+
+    resetFoodSuggestions()
   }
 
   const openAddModal = () => {
@@ -100,6 +165,18 @@ export default function FridgePage() {
     setFormExpiresOn(item.expiresOn ?? "")
     setEditingItem(item)
     setShowAddModal(true)
+
+    resetFoodSuggestions()
+  }
+
+  const selectSuggestion = (item: FoodSearchItem) => {
+    const displayName = item.displayName?.trim() || item.name
+    setFormName(displayName)
+    setFormCategory(item.category)
+    setFormUnit(item.defaultUnit)
+    setSelectedFood(item)
+    setShowSuggestions(false)
+    setActiveSuggestionIndex(-1)
   }
 
   const handleSubmit = async () => {
@@ -110,6 +187,10 @@ export default function FridgePage() {
       alert("재료명과 수량을 올바르게 입력해주세요")
       return
     }
+
+    const trimmedName = formName.trim()
+    const selectedName = (selectedFood?.displayName ?? selectedFood?.name ?? "").trim()
+    const useSelectedMeta = !!selectedFood && selectedName.length > 0 && selectedName === trimmedName
 
     setSaving(true)
 
@@ -122,8 +203,7 @@ export default function FridgePage() {
             "x-user-id": userId,
           },
           body: JSON.stringify({
-            name: formName.trim(),
-            category: formCategory,
+            name: trimmedName,
             amount,
             unit: formUnit,
             expiresOn: formExpiresOn || null,
@@ -141,8 +221,11 @@ export default function FridgePage() {
             "x-user-id": userId,
           },
           body: JSON.stringify({
-            name: formName.trim(),
-            category: formCategory,
+            name: trimmedName,
+            category: useSelectedMeta ? selectedFood.category : undefined,
+            subCategory: useSelectedMeta
+              ? (selectedFood.subCategory ?? selectedFood.displayName ?? selectedFood.name)
+              : undefined,
             amount,
             unit: formUnit,
             expiresOn: formExpiresOn || undefined,
@@ -156,7 +239,7 @@ export default function FridgePage() {
 
       setShowAddModal(false)
       resetForm()
-      await loadItems(userId, activeCategory, sortBy)
+      await loadItems(userId)
     } catch {
       alert(editingItem ? "재료 수정에 실패했습니다" : "재료 추가에 실패했습니다")
     } finally {
@@ -178,7 +261,7 @@ export default function FridgePage() {
         throw new Error("삭제 실패")
       }
 
-      await loadItems(userId, activeCategory, sortBy)
+      await loadItems(userId)
     } catch {
       alert("재료 삭제에 실패했습니다")
     }
@@ -192,6 +275,8 @@ export default function FridgePage() {
     setFormExpiresOn("")
     setEditingItem(null)
     setShowAddModal(true)
+
+    resetFoodSuggestions()
   }
 
   const handleQuickStart = () => {
@@ -217,15 +302,20 @@ export default function FridgePage() {
   }
 
   const filteredItems = useMemo(() => {
+    const base = activeCategory === "all"
+      ? [...items]
+      : items.filter((item) => item.category === activeCategory)
+
     if (sortBy === "expiresOn") {
-      return [...items].sort((a, b) => {
+      return base.sort((a, b) => {
         if (!a.expiresOn) return 1
         if (!b.expiresOn) return -1
         return a.expiresOn.localeCompare(b.expiresOn)
       })
     }
-    return [...items].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-  }, [items, sortBy])
+
+    return base.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  }, [items, activeCategory, sortBy])
 
   return (
     <div className="min-h-screen bg-dc-bg">
@@ -295,9 +385,7 @@ export default function FridgePage() {
               <button
                 onClick={() => setSortBy("expiresOn")}
                 className={`h-9 px-3 rounded-lg text-[12px] font-medium transition-colors ${
-                  sortBy === "expiresOn"
-                    ? "bg-dc-primary text-white"
-                    : "bg-dc-muted text-dc-text-secondary"
+                  sortBy === "expiresOn" ? "bg-dc-primary text-white" : "bg-dc-muted text-dc-text-secondary"
                 }`}
               >
                 유통기한순
@@ -305,9 +393,7 @@ export default function FridgePage() {
               <button
                 onClick={() => setSortBy("updatedAt")}
                 className={`h-9 px-3 rounded-lg text-[12px] font-medium transition-colors ${
-                  sortBy === "updatedAt"
-                    ? "bg-dc-primary text-white"
-                    : "bg-dc-muted text-dc-text-secondary"
+                  sortBy === "updatedAt" ? "bg-dc-primary text-white" : "bg-dc-muted text-dc-text-secondary"
                 }`}
               >
                 최신순
@@ -337,10 +423,7 @@ export default function FridgePage() {
                 const label = UNITS.find((u) => u.id === item.unit)?.label || item.unit
 
                 return (
-                  <div
-                    key={item.id}
-                    className="bg-dc-surface rounded-2xl border border-dc-border p-4 flex items-center gap-4"
-                  >
+                  <div key={item.id} className="bg-dc-surface rounded-2xl border border-dc-border p-4 flex items-center gap-4">
                     <div className="w-12 h-12 rounded-xl bg-dc-muted flex items-center justify-center text-2xl flex-none">
                       {category?.icon || "📦"}
                     </div>
@@ -349,14 +432,10 @@ export default function FridgePage() {
                       <div className="flex items-center gap-2">
                         <p className="text-dc-text text-[15px] font-bold truncate">{item.name}</p>
                         {isExpired && (
-                          <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
-                            만료
-                          </span>
+                          <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">만료</span>
                         )}
                         {!isExpired && isExpiringSoon && (
-                          <span className="text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full">
-                            D-{dday}
-                          </span>
+                          <span className="text-[10px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full">D-{dday}</span>
                         )}
                       </div>
                       <div className="flex items-center gap-3 mt-1">
@@ -364,9 +443,7 @@ export default function FridgePage() {
                           {item.amount}
                           {label}
                         </span>
-                        {item.expiresOn && (
-                          <span className="text-dc-text-muted text-[12px]">~ {item.expiresOn}</span>
-                        )}
+                        {item.expiresOn && <span className="text-dc-text-muted text-[12px]">~ {item.expiresOn}</span>}
                       </div>
                     </div>
 
@@ -444,35 +521,88 @@ export default function FridgePage() {
             <h2 className="text-dc-text text-[18px] font-bold mb-5">{editingItem ? "재료 수정" : "재료 추가"}</h2>
 
             <div className="space-y-4">
-              <div>
+              <div className="relative">
                 <label className="text-dc-text text-[13px] font-semibold block mb-2">
                   재료명 <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
+                  onChange={(e) => {
+                    setFormName(e.target.value)
+                    setSelectedFood(null)
+                    setShowSuggestions(true)
+                    setActiveSuggestionIndex(-1)
+                  }}
+                  onFocus={() => {
+                    if (formName.trim().length >= 1) {
+                      setShowSuggestions(true)
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (!showSuggestions || foodSuggestions.length === 0) return
+
+                    if (e.key === "ArrowDown") {
+                      e.preventDefault()
+                      setActiveSuggestionIndex((prev) => Math.min(prev + 1, foodSuggestions.length - 1))
+                      return
+                    }
+
+                    if (e.key === "ArrowUp") {
+                      e.preventDefault()
+                      setActiveSuggestionIndex((prev) => Math.max(prev - 1, 0))
+                      return
+                    }
+
+                    if (e.key === "Enter" && activeSuggestionIndex >= 0) {
+                      e.preventDefault()
+                      const picked = foodSuggestions[activeSuggestionIndex]
+                      if (picked) selectSuggestion(picked)
+                      return
+                    }
+
+                    if (e.key === "Escape") {
+                      setShowSuggestions(false)
+                      setActiveSuggestionIndex(-1)
+                    }
+                  }}
                   placeholder="예) 계란"
                   className="w-full h-11 px-4 bg-dc-muted rounded-xl text-dc-text text-[15px] placeholder:text-dc-text-muted focus:outline-none focus:ring-1 focus:ring-dc-primary border border-transparent focus:border-dc-primary transition-colors"
                 />
-              </div>
 
-              <div>
-                <label className="text-dc-text text-[13px] font-semibold block mb-2">카테고리</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {CATEGORIES.map((cat) => (
-                    <button
-                      key={cat.id}
-                      onClick={() => setFormCategory(cat.id)}
-                      className={`h-11 rounded-xl text-[13px] font-medium transition-colors flex items-center justify-center gap-1.5 ${
-                        formCategory === cat.id ? "bg-dc-primary text-white" : "bg-dc-muted text-dc-text-secondary"
-                      }`}
-                    >
-                      <span>{cat.icon}</span>
-                      {cat.label}
-                    </button>
-                  ))}
-                </div>
+                {showSuggestions && formName.trim().length >= 1 && (
+                  <div className="absolute z-20 mt-2 w-full rounded-xl border border-dc-border bg-dc-surface shadow-md overflow-hidden">
+                    <div className="max-h-56 overflow-y-auto">
+                      {foodSearchLoading ? (
+                        <p className="px-3 py-2 text-[12px] text-dc-text-secondary">검색 중...</p>
+                      ) : foodSuggestions.length > 0 ? (
+                        foodSuggestions.map((item, index) => {
+                          const displayName = item.displayName?.trim() || item.name
+                          const isActive = index === activeSuggestionIndex
+                          return (
+                            <button
+                              key={`${item.name}-${index}`}
+                              type="button"
+                              onMouseDown={(evt) => evt.preventDefault()}
+                              onClick={() => selectSuggestion(item)}
+                              className={`w-full text-left px-3 py-2 transition-colors ${
+                                isActive ? "bg-dc-muted" : "hover:bg-dc-muted"
+                              }`}
+                            >
+                              <p className="text-[13px] font-medium text-dc-text">{displayName}</p>
+                              <p className="text-[11px] text-dc-text-secondary">
+                                {item.category}
+                                {item.subCategory ? ` · ${item.subCategory}` : ""}
+                              </p>
+                            </button>
+                          )
+                        })
+                      ) : (
+                        <p className="px-3 py-2 text-[12px] text-dc-text-secondary">검색 결과가 없습니다. 직접 추가할 수 있어요.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-[1fr_120px] gap-2">
@@ -482,11 +612,11 @@ export default function FridgePage() {
                   </label>
                   <input
                     type="number"
-                    step="0.1"
-                    min="0"
+                    step="1"
+                    min="1"
                     value={formAmount}
                     onChange={(e) => setFormAmount(e.target.value)}
-                    placeholder="10"
+                    placeholder="1"
                     className="w-full h-11 px-4 bg-dc-muted rounded-xl text-dc-text text-[15px] placeholder:text-dc-text-muted focus:outline-none focus:ring-1 focus:ring-dc-primary border border-transparent focus:border-dc-primary transition-colors"
                   />
                 </div>
@@ -543,4 +673,3 @@ export default function FridgePage() {
     </div>
   )
 }
-

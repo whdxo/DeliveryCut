@@ -7,19 +7,27 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "import:foods": "node scripts/import-food-catalog.cjs",
+    "import:foods:dry": "node scripts/import-food-catalog.cjs --dry-run",
+    "normalize:foods": "node scripts/normalize-food-catalog.cjs",
+    "normalize:foods:dry": "node scripts/normalize-food-catalog.cjs --dry-run",
+    "dedupe:foods": "node scripts/dedupe-food-catalog.cjs",
+    "dedupe:foods:dry": "node scripts/dedupe-food-catalog.cjs --dry-run"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "firebase": "^11.10.0",
+    "firebase-admin": "12.7.0",
     "lucide-react": "^0.570.0",
     "next": "^15.3.9",
     "openai": "^4.75.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "tailwind-merge": "^3.4.1"
+    "tailwind-merge": "^3.4.1",
+    "xlsx": "0.18.5"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
@@ -34,3 +42,4 @@
     "typescript": "^5.7.3"
   }
 }
+

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { searchFoodCatalogItems, upsertFoodCatalogItems } from "@/lib/firebase"
 import { searchFallbackFoods } from "@/lib/food/fallback"
 import type { FoodSearchResponse } from "@/lib/types/api"
 
@@ -11,15 +12,27 @@ export async function GET(request: Request) {
     return NextResponse.json(empty)
   }
 
-  // TODO: 식약처 Open API key 연결 시 외부 검색 결과를 먼저 시도
-  // 현재는 내부 fallback 사전을 우선 제공
-  const items = searchFallbackFoods(q).map((item) => ({
+  const cached = await searchFoodCatalogItems(q, 10)
+  if (!cached.error && cached.data.length > 0) {
+    return NextResponse.json({ items: cached.data })
+  }
+
+
+  const fallbackItems = searchFallbackFoods(q).map((item) => ({
     name: item.name,
+    displayName: item.subCategory ?? item.name,
+    state: null,
     category: item.category,
+    subCategory: item.subCategory,
     defaultUnit: item.defaultUnit,
     source: "fallback" as const,
   }))
 
-  const response: FoodSearchResponse = { items }
+  if (fallbackItems.length > 0) {
+    await upsertFoodCatalogItems(fallbackItems)
+  }
+
+  const response: FoodSearchResponse = { items: fallbackItems }
   return NextResponse.json(response)
 }
+
