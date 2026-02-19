@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation"
 import { NavBar, MobileBottomNav } from "@/components/shared/PageLayout"
 import { onAuthChange } from "@/lib/firebase"
 import type { FridgeCategory, FridgeItem, FridgeListResponse, QuantityUnit } from "@/lib/types/api"
-import { FRIDGE_CATEGORIES as CATEGORIES, QUANTITY_UNITS as UNITS } from "@/lib/fridge/constants";
-import { INGREDIENT_SUGGESTIONS } from "@/lib/types/fridge" // TODO: This should also be moved to constants
+import { CATEGORIES, INGREDIENT_SUGGESTIONS, UNITS } from "@/lib/types/fridge"
+
 
 export default function FridgePage() {
   const router = useRouter()
@@ -413,7 +413,7 @@ export default function FridgePage() {
                       {cat.label}
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {INGREDIENT_SUGGESTIONS[cat.id].slice(0, 5).map((name) => (
+                      {(INGREDIENT_SUGGESTIONS[cat.id] ?? []).slice(0, 5).map((name) => (
                         <button
                           key={name}
                           onClick={() => handleQuickAdd(name, cat.id)}
@@ -543,3 +543,4 @@ export default function FridgePage() {
     </div>
   )
 }
+
