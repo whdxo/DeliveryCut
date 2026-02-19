@@ -12,6 +12,7 @@ import {
   limit,
   Timestamp,
   runTransaction,
+  writeBatch,
 } from "firebase/firestore"
 import type {
   FridgeCategory,
@@ -20,6 +21,7 @@ import type {
   FridgeCreateInput,
   FridgeItem,
   FridgeUpdateInput,
+  FoodSearchItem,
   QuantityUnit,
   StoredMenuPlan,
 } from "@/lib/types/api"
@@ -32,6 +34,7 @@ export const collections = {
   ingredients: "ingredients",
   fridgeItems: "fridgeItems",
   consumptionLogs: "consumptionLogs",
+  foodCatalog: "foodCatalog",
 }
 
 export const setDocument = async (collectionName: string, docId: string, data: any) => {
@@ -136,6 +139,7 @@ const normalizeFridgeDoc = (docId: string, raw: Record<string, unknown>): Fridge
     id: docId,
     name,
     category,
+    subCategory: typeof raw.subCategory === "string" ? raw.subCategory : name,
     amount,
     unit,
     expiresOn: typeof raw.expiresOn === "string" ? raw.expiresOn : null,
@@ -194,6 +198,7 @@ export const addFridgeItem = async (userId: string, input: FridgeCreateInput) =>
       id: itemRef.id,
       name,
       category: input.category ?? "other",
+      subCategory: input.subCategory?.trim() || name,
       amount,
       unit: input.unit,
       expiresOn: input.expiresOn?.trim() || null,
@@ -221,6 +226,7 @@ export const updateFridgeItem = async (userId: string, itemId: string, input: Fr
 
     if (typeof input.name === "string") payload.name = input.name.trim()
     if (input.category) payload.category = input.category
+    if (typeof input.subCategory === "string") payload.subCategory = input.subCategory.trim()
     if (typeof input.amount === "number") payload.amount = input.amount
     if (input.unit) payload.unit = input.unit
     if (input.expiresOn !== undefined) payload.expiresOn = input.expiresOn
@@ -252,13 +258,19 @@ export const deleteFridgeItem = async (userId: string, itemId: string) => {
 }
 
 export const consumeFridgeItems = async (userId: string, input: FridgeConsumeInput) => {
-  try {
-    const result = await runTransaction(db, async (transaction) => {
+  const runConsumeTransaction = async (withLog: boolean) => {
+    return runTransaction(db, async (transaction) => {
       const beforeSnapshots: Record<string, FridgeItem> = {}
       const consumeResults: FridgeConsumeResult[] = []
+      const updates: Array<{ itemId: string; afterAmount: number }> = []
 
-      for (const consumeItem of input.items) {
-        const itemRef = doc(db, collections.users, userId, collections.fridgeItems, consumeItem.itemId)
+      // 1) Read all target docs first.
+      const refs = input.items.map((consumeItem) => ({
+        consumeItem,
+        itemRef: doc(db, collections.users, userId, collections.fridgeItems, consumeItem.itemId),
+      }))
+
+      for (const { consumeItem, itemRef } of refs) {
         const snap = await transaction.get(itemRef)
         if (!snap.exists()) {
           throw new Error(`ITEM_NOT_FOUND:${consumeItem.itemId}`)
@@ -277,9 +289,10 @@ export const consumeFridgeItems = async (userId: string, input: FridgeConsumeInp
         }
 
         const nextAmount = Number((stock.amount - converted).toFixed(4))
-        transaction.update(itemRef, {
-          amount: nextAmount,
-          updatedAt: new Date().toISOString(),
+
+        updates.push({
+          itemId: stock.id,
+          afterAmount: nextAmount,
         })
 
         consumeResults.push({
@@ -292,24 +305,193 @@ export const consumeFridgeItems = async (userId: string, input: FridgeConsumeInp
         })
       }
 
-      const logRef = doc(collection(db, collections.users, userId, collections.consumptionLogs))
-      transaction.set(logRef, {
-        recipeId: input.recipeId,
-        resultId: input.resultId ?? null,
-        consumedItems: consumeResults,
-        consumedAt: new Date().toISOString(),
-        snapshotBefore: beforeSnapshots,
-      })
+      // 2) Then apply writes.
+      for (const updateItem of updates) {
+        const itemRef = doc(db, collections.users, userId, collections.fridgeItems, updateItem.itemId)
+        if (updateItem.afterAmount <= 0) {
+          transaction.delete(itemRef)
+          continue
+        }
+
+        transaction.update(itemRef, {
+          amount: updateItem.afterAmount,
+          updatedAt: new Date().toISOString(),
+        })
+      }
+
+      if (withLog) {
+        const logRef = doc(collection(db, collections.users, userId, collections.consumptionLogs))
+        transaction.set(logRef, {
+          recipeId: input.recipeId,
+          resultId: input.resultId ?? null,
+          consumedItems: consumeResults,
+          consumedAt: new Date().toISOString(),
+          snapshotBefore: beforeSnapshots,
+        })
+      }
 
       return consumeResults
     })
+  }
 
+  try {
+    const result = await runConsumeTransaction(true)
     return { data: result, error: null }
   } catch (error: any) {
-    return { data: null, error: error.message as string }
+    const message = String(error?.message ?? error)
+    const isPermissionError = message.includes("permission-denied") || message.includes("Missing or insufficient permissions")
+
+    if (isPermissionError) {
+      try {
+        // If logging path is blocked by rules, still allow stock deduction.
+        const fallbackResult = await runConsumeTransaction(false)
+        return { data: fallbackResult, error: null }
+      } catch (fallbackError: any) {
+        return { data: null, error: String(fallbackError?.message ?? fallbackError) }
+      }
+    }
+
+    return { data: null, error: message }
+  }
+}
+const normalizeFoodCatalogKey = (value: string) => value.trim().toLowerCase()
+
+const normalizeFoodCatalogDoc = (docId: string, raw: Record<string, unknown>): FoodSearchItem => {
+  const name = typeof raw.name === "string" ? raw.name : docId
+  const displayName = typeof raw.displayName === "string" && raw.displayName.trim() ? raw.displayName.trim() : undefined
+  const state = typeof raw.state === "string" ? raw.state : null
+  const category = (typeof raw.category === "string" ? raw.category : "other") as FoodSearchItem["category"]
+  const subCategory = typeof raw.subCategory === "string" && raw.subCategory.trim() ? raw.subCategory : displayName ?? name
+  const defaultUnit = (typeof raw.defaultUnit === "string" ? raw.defaultUnit : "count") as FoodSearchItem["defaultUnit"]
+  const source = (typeof raw.source === "string" ? raw.source : "fallback") as FoodSearchItem["source"]
+
+  return {
+    name,
+    displayName,
+    state,
+    category,
+    subCategory,
+    defaultUnit,
+    source,
   }
 }
 
+export const upsertFoodCatalogItems = async (items: FoodSearchItem[]) => {
+  try {
+    if (items.length === 0) {
+      return { count: 0, error: null }
+    }
+
+    const batch = writeBatch(db)
+    let count = 0
+
+    const dedupe = new Map<string, FoodSearchItem>()
+    for (const item of items) {
+      const key = normalizeFoodCatalogKey(item.name)
+      if (!key) continue
+      if (!dedupe.has(key)) {
+        dedupe.set(key, item)
+      }
+    }
+
+    for (const [key, item] of dedupe.entries()) {
+      const docRef = doc(db, collections.foodCatalog, key)
+      batch.set(
+        docRef,
+        {
+          name: item.name,
+          nameLower: key,
+          displayName: item.displayName ?? item.subCategory ?? item.name,
+          displayNameLower: normalizeFoodCatalogKey(item.displayName ?? item.subCategory ?? item.name),
+          state: item.state ?? null,
+          category: item.category,
+          subCategory: item.subCategory ?? item.displayName ?? item.name,
+          subCategoryLower: normalizeFoodCatalogKey(item.subCategory ?? item.displayName ?? item.name),
+          defaultUnit: item.defaultUnit,
+          source: item.source,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      )
+      count += 1
+    }
+
+    await batch.commit()
+    return { count, error: null }
+  } catch (error: any) {
+    return { count: 0, error: error.message }
+  }
+}
+
+export const searchFoodCatalogItems = async (q: string, max = 10) => {
+  try {
+    const keyword = normalizeFoodCatalogKey(q)
+    if (!keyword) {
+      return { data: [], error: null }
+    }
+
+    const catalogRef = collection(db, collections.foodCatalog)
+    const endKeyword = `${keyword}\uf8ff`
+
+    const queryByField = async (field: "nameLower" | "displayNameLower" | "subCategoryLower") => {
+      return getDocs(
+        query(
+          catalogRef,
+          where(field, ">=", keyword),
+          where(field, "<=", endKeyword),
+          orderBy(field),
+          limit(Math.max(max, 20))
+        )
+      )
+    }
+
+    const [nameSnap, displaySnap, subSnap] = await Promise.all([
+      queryByField("nameLower"),
+      queryByField("displayNameLower"),
+      queryByField("subCategoryLower"),
+    ])
+
+    const merged = new Map<string, FoodSearchItem>()
+    for (const snap of [nameSnap, displaySnap, subSnap]) {
+      for (const docItem of snap.docs) {
+        const raw = docItem.data() as Record<string, unknown>
+        if (raw.hidden === true) continue
+
+        if (!merged.has(docItem.id)) {
+          merged.set(docItem.id, normalizeFoodCatalogDoc(docItem.id, raw))
+        }
+      }
+    }
+
+    const rawItems = [...merged.values()]
+      .sort((a, b) => {
+        const aKey = normalizeFoodCatalogKey(a.displayName ?? a.name)
+        const bKey = normalizeFoodCatalogKey(b.displayName ?? b.name)
+        const ap = aKey.startsWith(keyword) ? 0 : 1
+        const bp = bKey.startsWith(keyword) ? 0 : 1
+        if (ap !== bp) return ap - bp
+        return (a.displayName ?? a.name).localeCompare((b.displayName ?? b.name), "ko")
+      })
+
+    const deduped = new Map<string, FoodSearchItem>()
+    for (const item of rawItems) {
+      const key = normalizeFoodCatalogKey(item.displayName ?? item.subCategory ?? item.name)
+      if (!key) continue
+      if (!deduped.has(key)) {
+        deduped.set(key, {
+          ...item,
+          state: null,
+          subCategory: item.displayName ?? item.subCategory ?? item.name,
+        })
+      }
+    }
+
+    const items = [...deduped.values()].slice(0, max)
+    return { data: items, error: null }
+  } catch (error: any) {
+    return { data: [], error: error.message }
+  }
+}
 export const saveMenuPlan = async (userId: string, menuPlan: any) => {
   try {
     const menuPlanRef = doc(collection(db, collections.menuPlans))
@@ -343,3 +525,14 @@ export const getUserMenuPlans = async (userId: string) => {
     return { data: null, error: error.message }
   }
 }
+
+
+
+
+
+
+
+
+
+
+

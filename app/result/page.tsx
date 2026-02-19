@@ -9,7 +9,16 @@ import RecipeView from "@/components/results/RecipeView"
 import ShoppingList from "@/components/results/ShoppingList"
 import { onAuthChange } from "@/lib/firebase"
 import { isQuantityUnit } from "@/lib/fridge/unit"
-import type { ApiError, FridgeConsumeInput, FridgeItem, MenuOption, QuantityUnit, ResultResponse, Tool } from "@/lib/types/api"
+import type {
+  ApiError,
+  FridgeConsumeInput,
+  FridgeConsumeResult,
+  FridgeItem,
+  MenuOption,
+  QuantityUnit,
+  ResultResponse,
+  Tool,
+} from "@/lib/types/api"
 
 const cacheKey = (resultId: string) => `deliverycut:result:${resultId}`
 
@@ -72,6 +81,31 @@ function normalizeShoppingUnit(unit: string): QuantityUnit {
   return "count"
 }
 
+function normalizeName(value: string) {
+  return value.toLowerCase().replace(/[\s,()\-_/]/g, "")
+}
+
+function findBestFridgeMatch(query: string, fridgeItems: FridgeItem[]) {
+  const key = normalizeName(query)
+  if (!key) return null
+
+  const exact = fridgeItems.find((item) => normalizeName(item.name) === key)
+  if (exact) return exact
+
+  const prefix = fridgeItems.find((item) => {
+    const itemKey = normalizeName(item.name)
+    return itemKey.startsWith(key) || key.startsWith(itemKey)
+  })
+  if (prefix) return prefix
+
+  const includes = fridgeItems.find((item) => {
+    const itemKey = normalizeName(item.name)
+    return itemKey.includes(key) || key.includes(itemKey)
+  })
+
+  return includes ?? null
+}
+
 function ResultContent() {
   const searchParams = useSearchParams()
   const resultId = searchParams.get("resultId")
@@ -88,6 +122,7 @@ function ResultContent() {
   const [consumeDraft, setConsumeDraft] = useState<{ itemId: string; name: string; amount: number; unit: QuantityUnit }[]>([])
   const [consumeError, setConsumeError] = useState<string | null>(null)
   const [consumeSuccess, setConsumeSuccess] = useState<string | null>(null)
+  const [consuming, setConsuming] = useState(false)
 
   useEffect(() => {
     const unsubscribe = onAuthChange((user) => {
@@ -186,30 +221,48 @@ function ResultContent() {
     : []
 
   const prepareConsumeDraft = () => {
+    if (!userId) {
+      setConsumeError("로그인 후 차감 기능을 사용할 수 있어요.")
+      return
+    }
+
     if (!result || !selectedData) return
 
-    const rows = result.output.shoppingList
-      .map((shoppingItem) => {
-        const matched = fridgeItems.find((f) => f.name.trim() === shoppingItem.item.trim())
-        if (!matched) return null
+    const byItemId = new Map<string, { itemId: string; name: string; amount: number; unit: QuantityUnit }>()
 
-        return {
-          itemId: matched.id,
-          name: matched.name,
-          amount: shoppingItem.quantity,
-          unit: normalizeShoppingUnit(shoppingItem.unit),
-        }
+    for (const shoppingItem of result.output.shoppingList) {
+      const matched = findBestFridgeMatch(shoppingItem.item, fridgeItems)
+      if (!matched) continue
+
+      byItemId.set(matched.id, {
+        itemId: matched.id,
+        name: matched.name,
+        amount: shoppingItem.quantity,
+        unit: normalizeShoppingUnit(shoppingItem.unit),
       })
-      .filter(Boolean) as { itemId: string; name: string; amount: number; unit: QuantityUnit }[]
+    }
 
+    for (const ingredientName of selectedData.ingredients) {
+      const matched = findBestFridgeMatch(ingredientName, fridgeItems)
+      if (!matched || byItemId.has(matched.id)) continue
+
+      byItemId.set(matched.id, {
+        itemId: matched.id,
+        name: matched.name,
+        amount: 1,
+        unit: matched.unit,
+      })
+    }
+
+    const rows = [...byItemId.values()]
     setConsumeDraft(rows)
-    setConsumeError(null)
+    setConsumeError(rows.length === 0 ? "차감할 재료를 찾지 못했습니다. 냉장고 이름과 식재료 이름을 확인해주세요." : null)
     setConsumeSuccess(null)
     setShowConsumeModal(true)
   }
 
   const submitConsume = async () => {
-    if (!userId || !selectedData || !result || consumeDraft.length === 0) {
+    if (!userId || !selectedData || !result || consumeDraft.length === 0 || consuming) {
       setConsumeError("차감할 재료가 없습니다.")
       return
     }
@@ -223,6 +276,8 @@ function ResultContent() {
         unit: item.unit,
       })),
     }
+
+    setConsuming(true)
 
     try {
       const response = await fetch("/api/fridge/consume", {
@@ -239,12 +294,29 @@ function ResultContent() {
         throw new Error(apiError.error.message)
       }
 
-      setConsumeSuccess("차감이 완료되었습니다.")
+      const body = (await response.json()) as { consumed: FridgeConsumeResult[] }
+      const consumed = body.consumed ?? []
+
+      setFridgeItems((prev) =>
+        prev
+          .map((item) => {
+            const hit = consumed.find((row) => row.consumedItemId === item.id)
+            if (!hit) return item
+            return {
+              ...item,
+              amount: hit.afterAmount,
+              updatedAt: new Date().toISOString(),
+            }
+          })
+          .filter((item) => item.amount > 0)
+      )
+
+      setConsumeSuccess(`차감이 완료되었습니다. (${consumed.length}개 재료)`)
       setShowConsumeModal(false)
     } catch (consumeSubmitError) {
-      setConsumeError(
-        consumeSubmitError instanceof Error ? consumeSubmitError.message : "재료 차감에 실패했습니다."
-      )
+      setConsumeError(consumeSubmitError instanceof Error ? consumeSubmitError.message : "재료 차감에 실패했습니다.")
+    } finally {
+      setConsuming(false)
     }
   }
 
@@ -297,7 +369,6 @@ function ResultContent() {
                 <button
                   type="button"
                   onClick={prepareConsumeDraft}
-                  disabled={!userId}
                   className="h-10 px-4 rounded-xl bg-dc-primary text-white text-sm font-semibold disabled:opacity-50"
                 >
                   요리 완료 후 재료 차감
@@ -336,7 +407,7 @@ function ResultContent() {
             </div>
 
             {consumeDraft.length === 0 ? (
-              <div className="text-sm text-dc-text-secondary">장보기 목록과 일치하는 냉장고 재료가 없습니다.</div>
+              <div className="text-sm text-dc-text-secondary">장보기 목록/레시피와 일치하는 냉장고 재료가 없습니다.</div>
             ) : (
               <div className="flex flex-col gap-2 max-h-[40vh] overflow-auto">
                 {consumeDraft.map((item, idx) => (
@@ -344,8 +415,8 @@ function ResultContent() {
                     <div className="w-28 text-sm text-dc-text">{item.name}</div>
                     <input
                       type="number"
-                      min={0.1}
-                      step={0.1}
+                      min={1}
+                      step={1}
                       value={item.amount}
                       onChange={(e) => {
                         const next = [...consumeDraft]
@@ -394,9 +465,10 @@ function ResultContent() {
               <button
                 type="button"
                 onClick={submitConsume}
-                className="h-9 px-4 rounded-lg bg-dc-primary text-white text-sm font-semibold"
+                disabled={consuming || consumeDraft.length === 0}
+                className="h-9 px-4 rounded-lg bg-dc-primary text-white text-sm font-semibold disabled:opacity-50"
               >
-                확정 차감
+                {consuming ? "차감 중..." : "확정 차감"}
               </button>
             </div>
           </div>
@@ -415,3 +487,4 @@ export default function ResultPage() {
     </Suspense>
   )
 }
+

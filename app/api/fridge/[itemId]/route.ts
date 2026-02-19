@@ -57,6 +57,13 @@ export async function PATCH(
     patch.category = body.category
   }
 
+  if (body.subCategory !== undefined) {
+    if (typeof body.subCategory !== "string" || !body.subCategory.trim()) {
+      return jsonError(400, "INVALID_INPUT", "subCategory must be non-empty string")
+    }
+    patch.subCategory = body.subCategory.trim()
+  }
+
   if (body.amount !== undefined) {
     if (!Number.isFinite(body.amount) || body.amount <= 0) {
       return jsonError(400, "INVALID_INPUT", "amount must be greater than 0")
@@ -117,3 +124,4 @@ export async function DELETE(
 
   return NextResponse.json({ ok: true })
 }
+

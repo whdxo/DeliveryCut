@@ -84,6 +84,7 @@ export interface FridgeItem {
   id: string
   name: string
   category: FridgeCategory
+  subCategory?: string
   amount: number
   unit: QuantityUnit
   expiresOn?: string | null
@@ -99,6 +100,7 @@ export interface FridgeListResponse {
 export interface FridgeCreateInput {
   name: string
   category?: FridgeCategory
+  subCategory?: string
   amount: number
   unit: QuantityUnit
   expiresOn?: string
@@ -107,6 +109,7 @@ export interface FridgeCreateInput {
 export interface FridgeUpdateInput {
   name?: string
   category?: FridgeCategory
+  subCategory?: string
   amount?: number
   unit?: QuantityUnit
   expiresOn?: string | null
@@ -135,11 +138,16 @@ export interface FridgeConsumeResult {
 
 export interface FoodSearchItem {
   name: string
+  displayName?: string
+  state?: string | null
   category: FridgeCategory
+  subCategory?: string
   defaultUnit: QuantityUnit
-  source: "mfds" | "fallback"
+  source: "mfds" | "fallback" | "xlsx"
 }
 
 export interface FoodSearchResponse {
   items: FoodSearchItem[]
 }
+
+
