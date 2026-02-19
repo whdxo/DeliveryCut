@@ -521,12 +521,12 @@ export const getUserMenuPlans = async (userId: string) => {
       limit(10)
     )
     const querySnapshot = await getDocs(q)
-    const menuPlans = querySnapshot.docs.map((docItem) => ({
-      id: docItem.id,
-      ...docItem.data(),
-    }))
+    const menuPlans = querySnapshot.docs.map((docItem) =>
+      docItem.data() as StoredMenuPlan
+    )
     return { data: menuPlans, error: null }
-  } catch (error: any) {
-    return { data: null, error: error.message }
+  } catch (error: unknown) {
+    return { data: null, error: error instanceof Error ? error.message : String(error) }
   }
 }
+
