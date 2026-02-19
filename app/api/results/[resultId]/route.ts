@@ -23,9 +23,10 @@ export async function GET(
       )
     }
     return NextResponse.json(result)
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
     return NextResponse.json(
-      { error: { code: "INTERNAL_ERROR", message: "Failed to fetch result", details: error.message } },
+      { error: { code: "INTERNAL_ERROR", message: "Failed to fetch result", details: errorMessage } },
       { status: 500 }
     )
   }

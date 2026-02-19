@@ -20,8 +20,8 @@ export const signUp = async (email: string, password: string) => {
       password
     )
     return { user: userCredential.user, error: null }
-  } catch (error: any) {
-    return { user: null, error: error.message }
+  } catch (error: unknown) {
+    return { user: null, error }
   }
 }
 
@@ -36,8 +36,8 @@ export const signIn = async (email: string, password: string) => {
       password
     )
     return { user: userCredential.user, error: null }
-  } catch (error: any) {
-    return { user: null, error: error.message }
+  } catch (error: unknown) {
+    return { user: null, error }
   }
 }
 
@@ -51,8 +51,8 @@ export const signInWithGoogle = async () => {
 
     const userCredential = await signInWithPopup(auth, provider)
     return { user: userCredential.user, error: null }
-  } catch (error: any) {
-    return { user: null, error: error.message }
+  } catch (error: unknown) {
+    return { user: null, error }
   }
 }
 
@@ -63,8 +63,8 @@ export const logOut = async () => {
   try {
     await signOut(auth)
     return { error: null }
-  } catch (error: any) {
-    return { error: error.message }
+  } catch (error: unknown) {
+    return { error }
   }
 }
 

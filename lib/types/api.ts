@@ -7,6 +7,7 @@ export interface GenerateInput {
   tools: Tool[]
   ingredientsText: string
   dislikedIngredientsText?: string
+  userId?: string | null
 }
 
 export interface MenuOption {
