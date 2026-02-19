@@ -8,7 +8,9 @@ import { getUserMenuPlans } from "@/lib/firebase/firestore"
 import { NavBar, MobileBottomNav } from "@/components/shared/PageLayout"
 import type { StoredMenuPlan } from "@/lib/types/api"
 
-type TimeFilter = "all" | 5 | 10 | 15
+type TimeFilter = "전체" | "5분 이하" | "10분" | "15분"
+
+const FILTERS: TimeFilter[] = ["전체", "5분 이하", "10분", "15분"]
 
 // 날짜 그룹핑 헬퍼
 const groupByDate = (plans: StoredMenuPlan[]) => {
@@ -48,7 +50,7 @@ export default function HistoryPage() {
   const router = useRouter()
   const [userId, setUserId] = useState<string | null>(null)
   const [history, setHistory] = useState<StoredMenuPlan[]>([])
-  const [filter, setFilter] = useState<TimeFilter>("all")
+  const [activeFilter, setActiveFilter] = useState<TimeFilter>("전체")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -87,11 +89,15 @@ export default function HistoryPage() {
     fetchHistory()
   }, [userId])
 
-  // 필터링
+  // 필터링 logic
   const filteredHistory = history.filter((item) => {
-    if (filter === "all") return true
-    // 첫 번째 메뉴의 timeMin으로 필터링
-    return item.output.menuOptions[0]?.timeMin === filter
+    if (activeFilter === "전체") return true
+
+    const timeLimit = item.output.menuOptions[0]?.timeMin
+    if (activeFilter === "5분 이하") return timeLimit <= 5
+    if (activeFilter === "10분") return timeLimit === 10
+    if (activeFilter === "15분") return timeLimit === 15
+    return true
   })
 
   const groupedHistory = groupByDate(filteredHistory)
@@ -102,55 +108,33 @@ export default function HistoryPage() {
         <NavBar variant="app" />
       </div>
 
-      <div className="flex w-full">
+      <div className="flex w-full min-h-[calc(100vh-3.5rem)] lg:min-h-[calc(100vh-4rem)]">
         <div className="flex-1 bg-dc-side border-r border-dc-border hidden lg:block" />
 
-        <div className="w-full lg:w-[960px] lg:flex-none px-5 lg:px-10 py-6 lg:py-12 flex flex-col gap-6 lg:gap-8 pb-24 lg:pb-12">
+        <div className="w-full lg:w-[960px] lg:flex-none px-5 lg:px-10 py-5 lg:py-12 flex flex-col gap-5 lg:gap-6 pb-nav-safe lg:pb-12">
+
+          {/* 페이지 헤더 */}
           <div className="flex flex-col gap-1">
-            <h1 className="text-dc-text text-2xl lg:text-[28px] font-bold">내 히스토리</h1>
-            <p className="text-dc-text-secondary text-sm">
+            <h1 className="text-dc-text text-[22px] lg:text-[28px] font-bold">내 히스토리</h1>
+            <p className="text-dc-text-secondary text-[13px] lg:text-sm leading-relaxed">
               이전에 생성한 메뉴 목록을 확인하세요
             </p>
           </div>
 
-          {/* 필터 칩 */}
-          <div className="flex gap-2 flex-wrap">
-            <button
-              onClick={() => setFilter("all")}
-              className={`h-9 px-4 rounded-full text-sm font-medium transition-colors ${filter === "all"
-                  ? "bg-dc-primary text-white"
-                  : "bg-dc-muted text-dc-text-secondary hover:bg-dc-border"
-                }`}
-            >
-              전체
-            </button>
-            <button
-              onClick={() => setFilter(5)}
-              className={`h-9 px-4 rounded-full text-sm font-medium transition-colors ${filter === 5
-                  ? "bg-dc-primary text-white"
-                  : "bg-dc-muted text-dc-text-secondary hover:bg-dc-border"
-                }`}
-            >
-              5분 이하
-            </button>
-            <button
-              onClick={() => setFilter(10)}
-              className={`h-9 px-4 rounded-full text-sm font-medium transition-colors ${filter === 10
-                  ? "bg-dc-primary text-white"
-                  : "bg-dc-muted text-dc-text-secondary hover:bg-dc-border"
-                }`}
-            >
-              10분
-            </button>
-            <button
-              onClick={() => setFilter(15)}
-              className={`h-9 px-4 rounded-full text-sm font-medium transition-colors ${filter === 15
-                  ? "bg-dc-primary text-white"
-                  : "bg-dc-muted text-dc-text-secondary hover:bg-dc-border"
-                }`}
-            >
-              15분
-            </button>
+          {/* 필터 탭 */}
+          <div className="flex gap-2 overflow-x-auto pb-0.5 -mx-5 px-5 lg:mx-0 lg:px-0 lg:flex-wrap">
+            {FILTERS.map((f) => (
+              <button
+                key={f}
+                onClick={() => setActiveFilter(f)}
+                className={`flex-none h-11 px-4 rounded-full text-[13px] font-medium transition-colors whitespace-nowrap ${activeFilter === f
+                    ? "bg-dc-primary text-white"
+                    : "bg-dc-muted text-dc-text-secondary hover:bg-dc-border"
+                  }`}
+              >
+                {f}
+              </button>
+            ))}
           </div>
 
           {/* 로딩 */}
@@ -192,43 +176,12 @@ export default function HistoryPage() {
             <div className="flex flex-col gap-6">
               {Object.entries(groupedHistory).map(([date, plans]) => (
                 <div key={date} className="flex flex-col gap-3">
-                  <div className="text-dc-text text-sm font-semibold">{date}</div>
-                  <div className="flex flex-col gap-3">
+                  <div className="text-dc-text-muted text-[12px] font-semibold tracking-wide">
+                    {date}
+                  </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 lg:gap-4">
                     {plans.map((plan) => (
-                      <div
-                        key={plan.resultId}
-                        className="bg-dc-surface rounded-xl border border-dc-border p-5 flex flex-col gap-3"
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex flex-col gap-1">
-                            <div className="text-dc-text font-semibold">
-                              {plan.output.menuOptions[0]?.title || "메뉴 이름 없음"}
-                            </div>
-                            <div className="text-dc-text-secondary text-xs">
-                              {new Date(plan.createdAt).toLocaleTimeString("ko-KR", {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </div>
-                          </div>
-                          <Link
-                            href={`/result?resultId=${plan.resultId}`}
-                            className="h-9 px-4 bg-dc-primary text-white text-sm font-medium rounded-lg hover:bg-[#2d6b45] transition-colors flex items-center flex-none"
-                          >
-                            다시 보기
-                          </Link>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {plan.output.menuOptions.slice(0, 3).map((menu, idx) => (
-                            <span
-                              key={idx}
-                              className="text-xs text-dc-text-secondary bg-dc-muted px-2 py-1 rounded-full"
-                            >
-                              {menu.title}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
+                      <HistoryCard key={plan.resultId} plan={plan} />
                     ))}
                   </div>
                 </div>
@@ -241,6 +194,46 @@ export default function HistoryPage() {
       </div>
 
       <MobileBottomNav />
+    </div>
+  )
+}
+
+function HistoryCard({ plan }: { plan: StoredMenuPlan }) {
+  const mainTitle = plan.output.menuOptions[0]?.title || "메뉴 이름 없음"
+  const timeStr = new Date(plan.createdAt).toLocaleTimeString("ko-KR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+
+  // 첫 3개 메뉴 이름을 태그로 사용
+  const tags = plan.output.menuOptions.slice(0, 3).map(m => m.title)
+
+  return (
+    <div className="bg-dc-surface rounded-2xl border border-dc-border p-4 flex flex-col gap-3">
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[11px] font-semibold text-dc-primary bg-dc-primary-light px-2.5 py-1 rounded-full w-fit">
+          {timeStr}
+        </span>
+        <div className="text-dc-text text-[15px] font-bold leading-snug">{mainTitle}</div>
+        <div className="text-dc-text-secondary text-[12px] leading-relaxed">
+          {tags.join(" · ")}
+        </div>
+      </div>
+
+      <div className="flex gap-2 mt-0.5">
+        <Link
+          href={`/result?resultId=${plan.resultId}`}
+          className="flex-1 h-11 bg-dc-primary text-white text-[13px] font-semibold rounded-xl flex items-center justify-center hover:bg-[#2d6b45] transition-colors"
+        >
+          다시 사용하기
+        </Link>
+        <Link
+          href={`/result?resultId=${plan.resultId}`}
+          className="h-11 px-4 bg-dc-muted text-dc-text-secondary text-[13px] font-medium rounded-xl flex items-center justify-center hover:bg-dc-border transition-colors"
+        >
+          보기
+        </Link>
+      </div>
     </div>
   )
 }

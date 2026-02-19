@@ -2,12 +2,14 @@
 
 import { useState, Suspense, useMemo, useEffect } from "react"
 import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { NavBar, MobileBottomNav } from "@/components/shared/PageLayout"
 import MenuCard from "@/components/results/MenuCard"
 import RecipeView from "@/components/results/RecipeView"
 import ShoppingList from "@/components/results/ShoppingList"
-import type { MenuOption, ResultResponse, Tool } from "@/lib/types/api"
+import { onAuthChange } from "@/lib/firebase"
+import { isQuantityUnit } from "@/lib/fridge/unit"
+import type { ApiError, FridgeConsumeInput, FridgeItem, MenuOption, QuantityUnit, ResultResponse, Tool } from "@/lib/types/api"
 
 const cacheKey = (resultId: string) => `deliverycut:result:${resultId}`
 
@@ -17,7 +19,6 @@ const toolLabel: Record<Tool, string> = {
   airfryer: "에어프라이어",
 }
 
-// ─── 로딩 스켈레톤 ────────────────────────────────────────────────────────────
 function SkeletonCard() {
   return (
     <div className="animate-pulse bg-dc-surface rounded-2xl border border-dc-border p-5 flex flex-col gap-3">
@@ -44,7 +45,6 @@ function LoadingState() {
   )
 }
 
-// ─── 에러 화면 ────────────────────────────────────────────────────────────────
 function ErrorState({ message }: { message: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
@@ -61,9 +61,18 @@ function ErrorState({ message }: { message: string }) {
   )
 }
 
-// ─── 메인 컨텐츠 ──────────────────────────────────────────────────────────────
+function normalizeShoppingUnit(unit: string): QuantityUnit {
+  if (isQuantityUnit(unit)) return unit
+  const lower = unit.toLowerCase()
+  if (lower === "개") return "count"
+  if (lower === "l") return "l"
+  if (lower === "ml") return "ml"
+  if (lower === "kg") return "kg"
+  if (lower === "g") return "g"
+  return "count"
+}
+
 function ResultContent() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const resultId = searchParams.get("resultId")
 
@@ -73,14 +82,29 @@ function ResultContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const [userId, setUserId] = useState<string | null>(null)
+  const [fridgeItems, setFridgeItems] = useState<FridgeItem[]>([])
+  const [showConsumeModal, setShowConsumeModal] = useState(false)
+  const [consumeDraft, setConsumeDraft] = useState<{ itemId: string; name: string; amount: number; unit: QuantityUnit }[]>([])
+  const [consumeError, setConsumeError] = useState<string | null>(null)
+  const [consumeSuccess, setConsumeSuccess] = useState<string | null>(null)
+
+  useEffect(() => {
+    const unsubscribe = onAuthChange((user) => {
+      setUserId(user?.uid ?? null)
+    })
+
+    return () => unsubscribe()
+  }, [])
+
   useEffect(() => {
     const fetchData = async () => {
       if (!resultId) {
-        router.replace("/home")
+        setError("올바르지 않은 접근이에요.")
+        setLoading(false)
         return
       }
 
-      // 1️⃣ sessionStorage 먼저 확인 (빠름)
       const cached = sessionStorage.getItem(cacheKey(resultId))
       if (cached) {
         try {
@@ -88,12 +112,10 @@ function ResultContent() {
           setLoading(false)
           return
         } catch {
-          // 파싱 실패 시 API로 fallback
-          console.warn("캐시 파싱 실패, API 조회로 전환")
+          // fallback to API
         }
       }
 
-      // 2️⃣ sessionStorage 없거나 파싱 실패 시 API 조회
       setLoading(true)
       try {
         const res = await fetch(`/api/results/${resultId}`)
@@ -109,8 +131,27 @@ function ResultContent() {
       }
     }
 
-    fetchData()
-  }, [resultId, router])
+    void fetchData()
+  }, [resultId])
+
+  useEffect(() => {
+    if (!userId) return
+
+    const loadFridge = async () => {
+      try {
+        const response = await fetch("/api/fridge", {
+          headers: { "x-user-id": userId },
+        })
+        if (!response.ok) return
+        const data = (await response.json()) as { items: FridgeItem[] }
+        setFridgeItems(data.items)
+      } catch {
+        // ignore fridge sync failure on result page
+      }
+    }
+
+    void loadFridge()
+  }, [userId])
 
   const menus = useMemo(() => {
     if (!result) return []
@@ -132,17 +173,80 @@ function ResultContent() {
 
   const mealPlan = result
     ? result.output.threeDayPlan.map((item) => ({
-      day: `Day ${item.day}`,
-      meals: [item.breakfast, item.lunch, item.dinner],
-    }))
+        day: `Day ${item.day}`,
+        meals: [item.breakfast, item.lunch, item.dinner],
+      }))
     : []
 
   const shopping = result
     ? result.output.shoppingList.map((item) => ({
-      name: item.item,
-      amount: `${item.quantity}${item.unit}`,
-    }))
+        name: item.item,
+        amount: `${item.quantity}${item.unit}`,
+      }))
     : []
+
+  const prepareConsumeDraft = () => {
+    if (!result || !selectedData) return
+
+    const rows = result.output.shoppingList
+      .map((shoppingItem) => {
+        const matched = fridgeItems.find((f) => f.name.trim() === shoppingItem.item.trim())
+        if (!matched) return null
+
+        return {
+          itemId: matched.id,
+          name: matched.name,
+          amount: shoppingItem.quantity,
+          unit: normalizeShoppingUnit(shoppingItem.unit),
+        }
+      })
+      .filter(Boolean) as { itemId: string; name: string; amount: number; unit: QuantityUnit }[]
+
+    setConsumeDraft(rows)
+    setConsumeError(null)
+    setConsumeSuccess(null)
+    setShowConsumeModal(true)
+  }
+
+  const submitConsume = async () => {
+    if (!userId || !selectedData || !result || consumeDraft.length === 0) {
+      setConsumeError("차감할 재료가 없습니다.")
+      return
+    }
+
+    const payload: FridgeConsumeInput = {
+      recipeId: selectedData.optionId,
+      resultId: result.resultId,
+      items: consumeDraft.map((item) => ({
+        itemId: item.itemId,
+        amount: item.amount,
+        unit: item.unit,
+      })),
+    }
+
+    try {
+      const response = await fetch("/api/fridge/consume", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id": userId,
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        const apiError = (await response.json()) as ApiError
+        throw new Error(apiError.error.message)
+      }
+
+      setConsumeSuccess("차감이 완료되었습니다.")
+      setShowConsumeModal(false)
+    } catch (consumeSubmitError) {
+      setConsumeError(
+        consumeSubmitError instanceof Error ? consumeSubmitError.message : "재료 차감에 실패했습니다."
+      )
+    }
+  }
 
   return (
     <div className="min-h-screen bg-dc-bg">
@@ -182,33 +286,122 @@ function ResultContent() {
             <p className="text-dc-text-secondary text-xs">메뉴를 선택하면 레시피를 볼 수 있어요</p>
           </div>
 
-          {/* 로딩 */}
           {loading && <LoadingState />}
-
-          {/* 에러 */}
           {!loading && error && <ErrorState message={error} />}
 
-          {/* 정상 */}
-          {!loading && !error && result && (
+          {!loading && !error && result && recipe && (
             <>
               <MenuCard menus={menus} selectedMenu={selectedMenu} onSelect={setSelectedMenu} />
-              {recipe && (
-                <div className="flex flex-col lg:flex-row gap-6">
-                  <RecipeView
-                    recipe={recipe}
-                    mealPlan={mealPlan}
-                    activeTab={activeTab}
-                    onTabChange={setActiveTab}
-                  />
-                  <ShoppingList items={shopping} />
-                </div>
-              )}
+
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={prepareConsumeDraft}
+                  disabled={!userId}
+                  className="h-10 px-4 rounded-xl bg-dc-primary text-white text-sm font-semibold disabled:opacity-50"
+                >
+                  요리 완료 후 재료 차감
+                </button>
+              </div>
+
+              {consumeError ? (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{consumeError}</div>
+              ) : null}
+              {consumeSuccess ? (
+                <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">{consumeSuccess}</div>
+              ) : null}
+
+              <div className="flex flex-col lg:flex-row gap-6">
+                <RecipeView
+                  recipe={recipe}
+                  mealPlan={mealPlan}
+                  activeTab={activeTab}
+                  onTabChange={setActiveTab}
+                />
+                <ShoppingList items={shopping} />
+              </div>
             </>
           )}
         </div>
 
         <div className="flex-1 bg-dc-side border-l border-dc-border hidden lg:block" />
       </div>
+
+      {showConsumeModal ? (
+        <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4">
+          <div className="w-full max-w-xl bg-white rounded-2xl border border-dc-border p-5 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-dc-text">재료 차감 확인</h2>
+              <button type="button" onClick={() => setShowConsumeModal(false)} className="text-dc-text-secondary">닫기</button>
+            </div>
+
+            {consumeDraft.length === 0 ? (
+              <div className="text-sm text-dc-text-secondary">장보기 목록과 일치하는 냉장고 재료가 없습니다.</div>
+            ) : (
+              <div className="flex flex-col gap-2 max-h-[40vh] overflow-auto">
+                {consumeDraft.map((item, idx) => (
+                  <div key={item.itemId} className="flex gap-2 items-center">
+                    <div className="w-28 text-sm text-dc-text">{item.name}</div>
+                    <input
+                      type="number"
+                      min={0.1}
+                      step={0.1}
+                      value={item.amount}
+                      onChange={(e) => {
+                        const next = [...consumeDraft]
+                        next[idx] = {
+                          ...next[idx],
+                          amount: Number(e.target.value),
+                        }
+                        setConsumeDraft(next)
+                      }}
+                      className="h-9 w-24 px-2 border border-dc-border rounded-lg"
+                    />
+                    <select
+                      value={item.unit}
+                      onChange={(e) => {
+                        const next = [...consumeDraft]
+                        next[idx] = {
+                          ...next[idx],
+                          unit: e.target.value as QuantityUnit,
+                        }
+                        setConsumeDraft(next)
+                      }}
+                      className="h-9 px-2 border border-dc-border rounded-lg"
+                    >
+                      <option value="count">개</option>
+                      <option value="g">g</option>
+                      <option value="kg">kg</option>
+                      <option value="ml">ml</option>
+                      <option value="l">L</option>
+                      <option value="pack">팩</option>
+                      <option value="tbsp">큰술</option>
+                      <option value="tsp">작은술</option>
+                    </select>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowConsumeModal(false)}
+                className="h-9 px-4 rounded-lg border border-dc-border text-sm"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={submitConsume}
+                className="h-9 px-4 rounded-lg bg-dc-primary text-white text-sm font-semibold"
+              >
+                확정 차감
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <MobileBottomNav />
     </div>

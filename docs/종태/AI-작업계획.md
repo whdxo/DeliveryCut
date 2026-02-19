@@ -1,464 +1,397 @@
-# 종태 AI 작업 계획
+# 종태 AI 작업 계획 (현재 프로젝트 기준)
 
-## 📌 담당 범위
+> 마지막 업데이트: 2026-02-18
+> 현재 프로젝트 분석 후 재작성
 
-`lib/ai/` 폴더 전체 구현 + `/api/generate` 연동 지원
+---
+
+## 📌 현재 상태 파악
+
+### 앱 구조 (2가지 모드)
+
+홈 화면(`/home`)에서 두 갈래로 분기됩니다:
 
 ```
-lib/ai/
-├── openai.ts        # OpenAI 클라이언트 + generateMenu() 메인 함수
-├── prompts.ts       # System / Developer / User 프롬프트
-├── schema.ts        # Structured Outputs JSON 스키마
-├── validation.ts    # 출력 검증 (시간/도구/알레르기)
-├── retry.ts         # 자동 재시도 로직
-└── fallback.ts      # AI 실패 시 템플릿 응답
+/home
+├── /quick     → 즉시 한끼 (재료+시간+도구 → 메뉴 3개 추천 → /result)
+└── /planner   → 플랜 생성기 (기간/끼니/예산 → 식단표 + 장보기)
+```
+
+### 이미 구현된 것 (건드리지 않기)
+
+| 파일 | 상태 | 내용 |
+|------|------|------|
+| `lib/types/api.ts` | ✅ 완성 | `GenerateInput`, `GenerateOutput`, `MenuOption` 등 타입 전부 정의됨 |
+| `lib/ai/schema.ts` | ✅ 완성 | 입력 검증 `validateGenerateInput()`, 출력 검증 `validateGenerateOutput()` 구현됨 |
+| `app/api/generate/route.ts` | ✅ 완성 | 입력 받기 → 검증 → AI 호출 → 출력 검증 → Firebase 저장 전체 흐름 완성 |
+| `app/quick/page.tsx` | ✅ 완성 | 즉시 한끼 입력 UI — `/result`로 URLSearchParams 전달 |
+| `app/planner/page.tsx` | ✅ 완성 | 플랜 생성 UI — 현재 하드코딩 Mock 데이터 표시 |
+| `app/result/page.tsx` | ✅ 완성 | 결과 UI — 현재 `MOCK_MENUS` 하드코딩 데이터 사용 |
+| `lib/ai/generateMenu.ts` | 🔄 Mock | OpenAI 연동만 빠진 상태. 이 파일만 수정하면 됨 |
+
+---
+
+## 🗺️ 현재 데이터 흐름
+
+### 즉시 한끼 흐름 (현재 상태)
+
+```
+/quick 입력
+  ↓ handleSubmit()
+router.push(`/result?time=10분&tools=팬&ingredients=계란,김치&mode=quick`)
+  ↓
+/result?...
+  ↓ useSearchParams()로 파라미터 읽기
+MOCK_MENUS 하드코딩 3개 메뉴 표시  ← API 호출 없음
+```
+
+### 즉시 한끼 흐름 (AI 연동 후 목표)
+
+```
+/quick 입력
+  ↓ handleSubmit()
+POST /api/generate { timeLimitMin, tools, ingredientsText, dislikedIngredientsText }
+  ↓ validateGenerateInput()
+  ↓ generateMenu()  ← OpenAI API 호출  ← 내가 작업할 부분
+  ↓ validateGenerateOutput()
+  ↓ saveResult() → Firebase
+  ↓ { resultId, output }
+sessionStorage에 캐시 저장
+router.push(`/result?resultId=xxx`)
+  ↓
+/result?resultId=xxx
+  ↓ sessionStorage 또는 /api/results/xxx 조회
+실제 AI 추천 메뉴 3개 표시
+```
+
+### 플랜 생성 흐름 (현재 상태)
+
+```
+/planner 입력 (기간, 끼니, 예산, 기피재료)
+  ↓ "플랜 생성하기" 버튼
+setGenerated(true)  ← API 호출 없이 로컬 Mock 데이터 표시
+PLAN_BASE[] 하드코딩 식단 표시
+SHOPPING_BASE[] 하드코딩 장보기 표시
+```
+
+> **참고**: 플랜 생성기는 현재 API 연동이 없는 순수 Mock 상태.
+> 즉시 한끼(/quick) AI 연동이 우선. 플랜 생성 API 연동은 추후 별도 작업.
+
+---
+
+## 📐 타입 구조 (이미 확정됨)
+
+```typescript
+// lib/types/api.ts — 이미 구현된 타입, 변경 없음
+
+// 입력 (/quick → /api/generate)
+interface GenerateInput {
+  timeLimitMin: 5 | 10 | 15
+  tools: ("microwave" | "pan" | "airfryer")[]
+  ingredientsText: string          // "계란, 김치, 두부, 양파"
+  dislikedIngredientsText?: string // "땅콩, 유제품" (선택)
+}
+
+// 출력 (AI → /api/generate → /result)
+interface GenerateOutput {
+  menuOptions: [MenuOption, MenuOption, MenuOption]  // 정확히 3개
+  threeDayPlan: [ThreeDayPlanItem, ThreeDayPlanItem, ThreeDayPlanItem]
+  shoppingList: ShoppingItem[]
+  ingredientsUsed?: Record<string, number>
+}
+
+interface MenuOption {
+  optionId: string          // "option-1", "option-2", "option-3"
+  title: string             // 메뉴 이름
+  timeMin: number           // 조리 시간 (≤ timeLimitMin)
+  tools: Tool[]             // 사용 도구
+  ingredients: string[]     // 재료 목록
+  steps: string[]           // 조리 순서 (3~5개)
+  tip: string               // 실패 방지 팁
+  difficulty?: "easy" | "medium" | "hard"
+  kcal?: number
+}
 ```
 
 ---
 
-## ✅ Day 1 — 환경 설정 + 인터페이스 확정
+## ✅ 작업 순서
 
-### 1. 개발 환경 세팅
+### Step 1 — 환경 설정 ✅ 완료
 
-```bash
-git clone https://github.com/whdxo/DeliveryCut.git
-cd DeliveryCut
-git checkout jongtae/#1
-npm install
-cp .env.example .env.local
-```
-
-`.env.local` 파일에 OpenAI API 키 입력:
+`.env.local` 에 이미 추가됨:
 ```
 OPENAI_API_KEY=sk-proj-...
 ```
 
-OpenAI SDK 설치 확인:
+설치 확인:
 ```bash
-npm list openai  # 이미 설치되어 있어야 함
+npm list openai
+# 없으면: npm install openai
 ```
 
 ---
 
-### 2. 세종과 인터페이스 합의 (Day 1 필수)
+### Step 2 — 프롬프트 파일 작성
 
-세종이 `/api/generate`에서 호출할 함수의 입출력 타입을 확정합니다.
-
-**`lib/types/api.ts` 에 아래 타입 추가** (세종과 공동 관리):
+**파일 생성: `lib/ai/prompts.ts`**
 
 ```typescript
-// 홈 화면 → API → AI로 전달되는 입력
-export interface GenerateInput {
-  timeLimitMin: 5 | 10 | 15
-  tools: ('microwave' | 'pan' | 'airfryer')[]
-  ingredientsText: string
-  dislikedIngredientsText?: string  // 기피 재료 (자유 텍스트)
-}
+import type { GenerateInput } from "@/lib/types/api"
 
-// AI → API → 결과 화면으로 전달되는 출력
-export interface MenuOption {
-  optionId: 'opt1' | 'opt2' | 'opt3'
-  title: string
-  timeMin: number
-  tools: string[]
-  dishwashing: 'low' | 'medium' | 'high'
-  difficulty: 'easy' | 'medium'
-  deliveryCutPoint: string           // "배달을 이길 이유" 한 줄
-  mainIngredientsUsed: string[]
-  missingIngredientsOptional: string[]
-}
-
-export interface Recipe {
-  prepLine: string
-  steps: string[]                    // 3~5개
-  failTip: string
-  safetyNote: string
-}
-
-export interface GenerateOutput {
-  todayOptions: MenuOption[]         // 항상 3개
-  recipesByOptionId: {
-    opt1: Recipe
-    opt2: Recipe
-    opt3: Recipe
-  }
-  plan3Days: {
-    day: 1 | 2 | 3
-    title: string
-    timeMin: number
-    tools: string[]
-    useStrategy: string
-  }[]
-  shoppingList: {
-    vegetables: string[]
-    protein: string[]
-    sauces: string[]
-    others: string[]
-  }
-  warnings: string[]
-}
-```
-
----
-
-### 3. 체크리스트
-
-- [ ] Git clone + 브랜치 확인
-- [ ] `.env.local` 에 `OPENAI_API_KEY` 설정
-- [ ] `npm run dev` 실행 확인
-- [ ] 세종에게 `GenerateInput` / `GenerateOutput` 타입 공유
-- [ ] 영진에게 결과 화면 데이터 구조 공유
-
----
-
-## ✅ Day 2 — 프롬프트 설계
-
-### 파일: `lib/ai/prompts.ts`
-
-**System Prompt** (고정, 역할 부여):
-```typescript
 export const SYSTEM_PROMPT = `
 당신은 1인 가구를 위한 "현생 요리 플래너"입니다.
 
-# 핵심 역할
-- 사용자의 현실적 제약(시간/도구/재료)을 기반으로 "배달 대체 한 끼"를 추천
-- 재료 낭비를 방지하고 최소 장보기를 유도하는 3일 플랜 제공
-- 간결하고 실패 확률이 낮은 레시피 제공
+# 역할
+- 사용자의 시간·도구·재료 제약을 기반으로 배달 대신 직접 만들 수 있는 메뉴 추천
+- 재료 낭비를 방지하는 3일 식단 플랜 제공
+- 간결하고 실패 확률 낮은 레시피 제공
 
 # 출력 규칙
-1. 반드시 JSON 스키마를 준수할 것
-2. 설명/마크다운/코드블록 금지, 오직 JSON만 반환
-3. 모든 필드를 빠짐없이 채울 것
+1. JSON만 반환 (설명, 마크다운, 코드블록 금지)
+2. 모든 필드를 빠짐없이 채울 것
+3. 한국어로 작성
 `.trim()
-```
 
-**Developer Prompt** (고정, 규칙 강제):
-```typescript
-export const DEVELOPER_PROMPT = `
-# 필수 준수 규칙
-
-## 제약 조건 100% 준수
-- 시간: 모든 메뉴의 timeMin은 입력한 timeLimitMin 이하
-- 도구: 각 메뉴의 tools는 입력한 tools의 부분집합
-- 기피 재료: dislikedIngredientsText에 포함된 재료는 절대 금지
-
-## 출력 형식
-- todayOptions: 정확히 3개 (opt1/opt2/opt3)
-- recipesByOptionId: opt1/opt2/opt3 모두 포함
-- steps: 3~5줄로 간결하게
-- plan3Days: 정확히 3일 (day 1/2/3)
-
-## 품질 기준
-- 메뉴 3개는 서로 다른 형태 (덮밥/찜/볶음밥 등)
-- deliveryCutPoint는 "배달을 이길 이유" 짧게 한 줄
-- useStrategy에 "어떤 재료를 언제 소진할지" 반드시 명시
-- shoppingList는 "부족한 것만"
-
-## 현생 모드
-- 설거지 최소 우선 (dishwashing=low 위주)
-- 재료는 있는 것 우선, 없는 건 missingIngredientsOptional에만
-
-## 안전 규칙
-- 의료/영양 처방 표현 금지
-- 생식/날것 위험 식품 권장 금지
-`.trim()
-```
-
-**User Prompt** (매 요청마다 동적 생성):
-```typescript
-export function buildUserPrompt(input: GenerateInput): string {
-  const { timeLimitMin, tools, ingredientsText, dislikedIngredientsText } = input
-
-  return `
-# 사용자 입력
+export const RULES_PROMPT = `
+# 반드시 지킬 규칙
 
 ## 제약 조건
-- 시간: ${timeLimitMin}분
-- 도구: ${tools.join(', ')}
+- timeMin: 모든 메뉴는 입력된 timeLimitMin 이하
+- tools: 각 메뉴의 tools는 입력된 tools 목록 안에서만 선택
+- 기피 재료: dislikedIngredientsText에 포함된 재료는 메뉴/재료/레시피 어디에도 절대 포함 금지
 
-## 냉장고 재료
-${ingredientsText}
+## 출력 형식
+- menuOptions: 정확히 3개, optionId는 "option-1", "option-2", "option-3"
+- 메뉴 3개는 서로 다른 형태 (볶음밥/덮밥/찜 등)
+- steps: 각 메뉴당 3~5줄, 간결하게
+- threeDayPlan: 정확히 3일 (day: 1, 2, 3)
+- shoppingList: 현재 재료에서 부족한 것만
 
-${dislikedIngredientsText ? `## 기피 재료 (절대 포함 금지)\n${dislikedIngredientsText}` : ''}
+## 품질
+- 설거지 최소 (한 냄비/팬으로 끝나는 메뉴 우선)
+- tip은 "가장 흔히 실패하는 포인트" 한 줄
+- 재료는 있는 것 최대한 활용
+`.trim()
 
----
+export function buildUserPrompt(input: GenerateInput): string {
+  const { timeLimitMin, tools, ingredientsText, dislikedIngredientsText } = input
+  const toolNames: Record<string, string> = {
+    microwave: "전자레인지",
+    pan: "팬",
+    airfryer: "에어프라이어",
+  }
+  return `
+# 사용자 조건
+- 요리 시간: ${timeLimitMin}분 이내
+- 사용 가능한 도구: ${tools.map(t => toolNames[t] ?? t).join(", ")}
+- 냉장고 재료: ${ingredientsText}
+${dislikedIngredientsText ? `- 기피 재료 (절대 제외): ${dislikedIngredientsText}` : ""}
 
-# 요청사항
-위 조건을 기반으로:
-1. 오늘의 배달 대체 메뉴 3개
-2. 각 메뉴의 3~5줄 레시피 + 실패 방지 팁
-3. 재료를 돌려쓰는 3일 식단 플랜
-4. 최소 장보기 리스트 (부족한 것만)
+# 요청
+위 조건으로:
+1. 배달 대신 직접 만들 수 있는 메뉴 3가지
+2. 각 메뉴의 재료, 조리 순서(3~5줄), 실패 방지 팁
+3. 이 재료들로 3일간 돌려먹는 식단 플랜
+4. 부족한 재료만 담은 장보기 리스트
 
-반드시 JSON 스키마를 준수하세요.
+JSON 스키마를 정확히 준수해서 반환하세요.
 `.trim()
 }
 ```
 
-### 체크리스트
-
-- [ ] `lib/ai/prompts.ts` 작성 완료
-- [ ] 프롬프트 수동 테스트 (ChatGPT 등에 붙여넣어 결과 확인)
-- [ ] 출력이 너무 비슷하거나 제약을 어기면 Developer Prompt 수정
-
 ---
 
-## ✅ Day 3 — JSON 스키마 + generateMenu() 구현
+### Step 3 — generateMenu 함수 교체
 
-### 파일: `lib/ai/schema.ts`
+**파일 수정: `lib/ai/generateMenu.ts`**
 
-OpenAI Structured Outputs용 JSON 스키마 정의.
-전체 스키마는 `claude/프로젝트문서/2.기술설계/2.4-AI-시스템-설계.md` 참고.
-
-핵심 구조:
-```typescript
-export const OUTPUT_SCHEMA = {
-  name: 'menu_generation',
-  strict: true,
-  schema: {
-    type: 'object',
-    properties: {
-      todayOptions: { /* 3개 메뉴 배열 */ },
-      recipesByOptionId: { /* opt1/opt2/opt3 레시피 */ },
-      plan3Days: { /* 3일 플랜 배열 */ },
-      shoppingList: { /* vegetables/protein/sauces/others */ },
-      warnings: { /* 안내 메시지 */ },
-    },
-    required: ['todayOptions', 'recipesByOptionId', 'plan3Days', 'shoppingList', 'warnings'],
-    additionalProperties: false,
-  },
-}
-```
-
----
-
-### 파일: `lib/ai/openai.ts`
+현재 Mock 코드를 아래로 전체 교체:
 
 ```typescript
-import OpenAI from 'openai'
-import { SYSTEM_PROMPT, DEVELOPER_PROMPT, buildUserPrompt } from './prompts'
-import { OUTPUT_SCHEMA } from './schema'
-import { validateOutput } from './validation'
-import type { GenerateInput, GenerateOutput } from '@/lib/types/api'
+import OpenAI from "openai"
+import { SYSTEM_PROMPT, RULES_PROMPT, buildUserPrompt } from "./prompts"
+import type { GenerateInput, GenerateOutput } from "@/lib/types/api"
+import { generateOutputJsonSchema } from "./schema"
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 })
 
-export async function generateMenu(input: GenerateInput): Promise<GenerateOutput> {
+export const generateMenu = async (input: GenerateInput): Promise<GenerateOutput> => {
   const response = await client.chat.completions.create({
-    model: 'gpt-4.1-mini',
+    model: "gpt-4o-mini",
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'developer', content: DEVELOPER_PROMPT },
-      { role: 'user', content: buildUserPrompt(input) },
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: RULES_PROMPT },
+      { role: "user", content: buildUserPrompt(input) },
     ],
     response_format: {
-      type: 'json_schema',
-      json_schema: OUTPUT_SCHEMA,
+      type: "json_schema",
+      json_schema: {
+        name: "menu_generation",
+        strict: true,
+        schema: generateOutputJsonSchema,
+      },
     },
     temperature: 0.7,
-    max_tokens: 2000,
+    max_tokens: 2500,
   })
 
   const content = response.choices[0]?.message?.content
-  if (!content) throw new Error('Empty response from OpenAI')
+  if (!content) throw new Error("OpenAI returned empty response")
 
-  const result = JSON.parse(content)
-  validateOutput(result, input)
-
-  return result
+  return JSON.parse(content) as GenerateOutput
 }
 ```
 
-### 체크리스트
-
-- [ ] `lib/ai/schema.ts` 완성 (스키마 전체 필드 채우기)
-- [ ] `lib/ai/openai.ts` 작성 완료
-- [ ] `npx tsx scripts/test-ai.ts` 로 실제 API 호출 테스트
-- [ ] 결과 JSON이 `GenerateOutput` 타입과 일치하는지 확인
+> **주의**: `generateOutputJsonSchema` 를 그대로 재사용하기 때문에
+> OpenAI 스키마와 검증 스키마가 항상 일치한다.
 
 ---
 
-## ✅ Day 4 — 검증 + 재시도 + 폴백
+### Step 4 — /quick → /result 연동 수정 (팀원 협업)
 
-### 파일: `lib/ai/validation.ts`
-
-AI 응답이 제약을 지켰는지 서버에서 2차로 검증:
-
+현재 `/quick/page.tsx`의 `handleSubmit()`은 URLSearchParams로 직접 이동:
 ```typescript
-export function validateOutput(output: any, input: GenerateInput): void {
-  // 1. 메뉴 3개인지
-  if (output.todayOptions?.length !== 3)
-    throw new Error('메뉴 옵션이 3개가 아닙니다')
-
-  // 2. 레시피 opt1/opt2/opt3 존재하는지
-  if (!output.recipesByOptionId?.opt1 || !output.recipesByOptionId?.opt2 || !output.recipesByOptionId?.opt3)
-    throw new Error('레시피 누락')
-
-  // 3. 시간 제약 확인
-  for (const option of output.todayOptions) {
-    if (option.timeMin > input.timeLimitMin)
-      throw new Error(`시간 초과: ${option.title} (${option.timeMin}분 > ${input.timeLimitMin}분)`)
-  }
-
-  // 4. 도구 제약 확인
-  for (const option of output.todayOptions) {
-    for (const tool of option.tools) {
-      if (!input.tools.includes(tool))
-        throw new Error(`사용 불가 도구: ${tool} in ${option.title}`)
-    }
-  }
-
-  // 5. 3일 플랜 확인
-  if (output.plan3Days?.length !== 3)
-    throw new Error('3일 플랜이 3개가 아닙니다')
-}
+// 현재 (API 호출 없음)
+router.push(`/result?time=...&tools=...&ingredients=...&mode=quick`)
 ```
 
----
-
-### 파일: `lib/ai/retry.ts`
-
-검증 실패 시 자동 1회 재시도:
-
+AI 연동 후에는 API를 호출하고 resultId로 이동:
 ```typescript
-import { generateMenu } from './openai'
-import type { GenerateInput, GenerateOutput } from '@/lib/types/api'
-
-export async function generateWithRetry(
-  input: GenerateInput,
-  maxRetries = 1
-): Promise<GenerateOutput> {
-  let lastError: Error | null = null
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      return await generateMenu(input)
-    } catch (error) {
-      console.error(`[AI] attempt ${attempt + 1} failed:`, error)
-      lastError = error as Error
-      if (attempt < maxRetries) {
-        await new Promise(r => setTimeout(r, 1000))
-      }
-    }
-  }
-
-  throw lastError ?? new Error('AI 생성 실패')
-}
+// 목표
+const res = await fetch("/api/generate", { method: "POST", body: JSON.stringify(payload) })
+const data = await res.json()
+sessionStorage.setItem(`deliverycut:result:${data.resultId}`, JSON.stringify({ ...data, input: payload }))
+router.push(`/result?resultId=${data.resultId}`)
 ```
 
-### 체크리스트
+그리고 `/result/page.tsx`도 `MOCK_MENUS` 대신 API 결과를 사용하도록 수정 필요.
 
-- [ ] `lib/ai/validation.ts` 작성 완료
-- [ ] `lib/ai/retry.ts` 작성 완료
-- [ ] 의도적으로 틀린 입력 넣어서 검증 로직 동작 확인
-- [ ] 재시도 후 성공 케이스 테스트
+> **⚠️ 내 범위**: `generateMenu.ts`와 `prompts.ts` 완성이 핵심.
+> `/quick/page.tsx`, `/result/page.tsx` UI 연동은 팀원과 협업.
 
 ---
 
-## ✅ Day 5 — 세종 API 연동 + 품질 테스트
+### Step 5 — 로컬 테스트
 
-### 세종의 `/api/generate/route.ts` 에서 호출 방법
-
-```typescript
-import { generateWithRetry } from '@/lib/ai/retry'
-import type { GenerateInput } from '@/lib/types/api'
-
-export async function POST(request: Request) {
-  const body = await request.json()
-
-  const input: GenerateInput = {
-    timeLimitMin: body.timeLimitMin,
-    tools: body.tools,
-    ingredientsText: body.ingredientsText,
-    dislikedIngredientsText: body.dislikedIngredientsText,
-  }
-
-  const result = await generateWithRetry(input)
-  return Response.json(result)
-}
-```
-
----
-
-### 품질 테스트 케이스 3개 (최소)
-
-`scripts/test-ai.ts` 파일 만들어서 실행:
-
+개발 서버 실행:
 ```bash
-npx tsx scripts/test-ai.ts
+npm run dev -- -p 3001
 ```
 
-| 케이스 | timeLimitMin | tools | 재료 | 기피 |
-|--------|-------------|-------|------|------|
-| 기본 | 10 | pan, microwave | 계란, 김치, 두부, 양파, 햇반 | 없음 |
-| 기피 재료 | 15 | pan, airfryer | 닭가슴살, 브로콜리, 고구마 | 유제품, 견과류 |
-| 극단 (5분) | 5 | microwave | 계란, 햇반, 김 | 없음 |
+curl로 직접 API 테스트:
+```bash
+# 기본 케이스
+curl -X POST http://localhost:3001/api/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "timeLimitMin": 10,
+    "tools": ["pan", "microwave"],
+    "ingredientsText": "계란, 김치, 두부, 양파, 햇반"
+  }'
+
+# 기피 재료 케이스
+curl -X POST http://localhost:3001/api/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "timeLimitMin": 15,
+    "tools": ["pan", "airfryer"],
+    "ingredientsText": "닭가슴살, 브로콜리, 고구마",
+    "dislikedIngredientsText": "유제품, 견과류"
+  }'
+
+# 극단 케이스 (5분, 전자레인지만)
+curl -X POST http://localhost:3001/api/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "timeLimitMin": 5,
+    "tools": ["microwave"],
+    "ingredientsText": "계란, 햇반, 김"
+  }'
+```
 
 **각 케이스에서 확인할 것:**
-- [ ] 시간 제약 지켜졌는가
-- [ ] 도구 제약 지켜졌는가
-- [ ] 기피 재료 포함 안 됐는가
-- [ ] 메뉴 3개 다 다른가
-- [ ] 레시피가 3~5줄인가
+- [ ] `menuOptions` 3개인가
+- [ ] 각 메뉴의 `timeMin` ≤ `timeLimitMin` 인가
+- [ ] 각 메뉴의 `tools`가 입력 도구 범위 안인가
+- [ ] `dislikedIngredientsText` 재료가 결과에 없는가
+- [ ] `steps` 3~5개인가
+- [ ] `threeDayPlan` 3일인가
+- [ ] `shoppingList` 있는가
 
 ---
 
-## 🔢 프롬프트 튜닝 기준
+### Step 6 — 문제 발생 시 대응
 
-| 문제 | 수정 방법 |
-|------|----------|
-| 메뉴 3개가 비슷함 | Developer Prompt에 "형태 변주 (덮밥/찜/볶음밥)" 강조 |
-| 시간 초과 | User Prompt에 시간 제약 재강조 |
-| 기피 재료 포함 | Developer Prompt에 "절대 금지" 문구 강화 |
-| 레시피가 너무 길거나 짧음 | Developer Prompt steps 길이 규칙 재명시 |
-| JSON 파싱 오류 | System Prompt "JSON만 반환" 강조, schema 확인 |
-
-Temperature 조정:
-- 현재: `0.7` (기본)
-- 창의성 더 필요: `0.8`
-- 일관성 더 필요: `0.6`
+| 문제 | 원인 | 대응 |
+|------|------|------|
+| `422 INVALID_AI_OUTPUT` 에러 | AI가 스키마 규칙 위반 (timeMin 초과 등) | RULES_PROMPT 강화 |
+| 메뉴 3개가 비슷함 | 창의성 부족 | temperature `0.7 → 0.8` 또는 RULES_PROMPT에 "형태 다양화" 강조 |
+| 기피 재료가 결과에 포함됨 | 프롬프트 지시 미흡 | RULES_PROMPT에 "절대 포함 금지" 재강조 |
+| JSON 파싱 오류 | 모델이 스키마 미준수 | `gpt-4o-mini` → `gpt-4o` 로 업그레이드 고려 |
+| API 응답 느림 (5초+) | 토큰 많음 | `max_tokens: 2500 → 2000` 으로 줄이기 |
+| `401 Unauthorized` | API 키 오류 | `.env.local` 확인, 서버 재시작 |
 
 ---
 
-## 📂 완성 후 파일 구조
+## 🔢 모델 선택 기준
+
+| 상황 | 모델 | 이유 |
+|------|------|------|
+| 개발/테스트 중 | `gpt-4o-mini` | 빠르고 저렴 |
+| 품질 문제 생기면 | `gpt-4o` | 정확도 높음, 비용 10배 |
+| 데모 당일 | `gpt-4o-mini` | 속도 우선 |
+
+---
+
+## 📂 최종 파일 구조
 
 ```
 lib/
 ├── ai/
-│   ├── openai.ts        ← generateMenu() 메인 함수
-│   ├── prompts.ts       ← System/Developer/User 프롬프트
-│   ├── schema.ts        ← JSON 스키마
-│   ├── validation.ts    ← 출력 검증
-│   ├── retry.ts         ← 재시도 로직
-│   └── fallback.ts      ← 폴백 (선택)
+│   ├── generateMenu.ts   ← 이 파일만 수정 (Mock → OpenAI)
+│   ├── prompts.ts        ← 새로 생성
+│   └── schema.ts         ← 건드리지 않음 (이미 완성)
 ├── types/
-│   └── api.ts           ← GenerateInput / GenerateOutput 타입
-scripts/
-└── test-ai.ts           ← 수동 테스트 스크립트
+│   └── api.ts            ← 건드리지 않음 (이미 완성)
+app/
+├── quick/
+│   └── page.tsx          ← handleSubmit() API 호출 방식으로 변경 (팀원 협업)
+├── result/
+│   └── page.tsx          ← MOCK_MENUS → API 데이터 연동 (팀원 협업)
+├── planner/
+│   └── page.tsx          ← 추후 별도 API 설계 (플랜 생성 v2)
+└── api/
+    └── generate/
+        └── route.ts      ← 건드리지 않음 (이미 완성)
 ```
 
 ---
 
 ## ✅ 완료 기준 (Definition of Done)
 
-- [ ] `generateMenu()` 함수 실제 API 호출 성공
-- [ ] 기본 테스트 케이스 3개 통과
-- [ ] 시간/도구/기피 재료 검증 로직 동작
-- [ ] 재시도 1회 로직 동작
-- [ ] 세종의 `/api/generate` 에서 호출 성공
-- [ ] TypeScript 에러 없음 (`npx tsc --noEmit`)
+### 내 담당 (AI 핵심)
+- [x] `OPENAI_API_KEY` 설정 완료
+- [ ] `lib/ai/prompts.ts` 작성 완료
+- [ ] `lib/ai/generateMenu.ts` Mock → OpenAI 교체 완료
+- [ ] curl 테스트 3케이스 모두 200 응답
+- [ ] `validateGenerateOutput()` 에러 없이 통과 (422 없음)
+- [ ] `npx tsc --noEmit` TypeScript 에러 없음
+
+### 팀원 협업 필요
+- [ ] `/quick/page.tsx` → API 호출 방식으로 handleSubmit 수정
+- [ ] `/result/page.tsx` → Mock 데이터 → API 결과 표시로 교체
+- [ ] `/planner/page.tsx` → 별도 Planner API 설계 (추후)
 
 ---
 
 ## 📚 참고 문서
 
-- [AI 작업 가이드](../../claude/역할별작업가이드/AI-작업가이드.md)
-- [AI 시스템 설계](../../claude/프로젝트문서/2.기술설계/2.4-AI-시스템-설계.md)
-- [AI 출력 스키마 + 프롬프트](../../claude/초기%20문서/AI%20출력%20스키마%20+%20프롬프트.md)
-- [역할 분담](../공동문서/역할-분담.md)
-
----
-
-**마지막 업데이트**: 2026-02-17
+- [현재 타입 정의](../../lib/types/api.ts)
+- [현재 스키마/검증](../../lib/ai/schema.ts)
+- [현재 API Route](../../app/api/generate/route.ts)
+- [즉시 한끼 입력 페이지](../../app/quick/page.tsx)
+- [결과 표시 페이지](../../app/result/page.tsx)
+- [플랜 생성 페이지](../../app/planner/page.tsx)

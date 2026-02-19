@@ -77,3 +77,70 @@ export interface StoredMenuPlan {
   createdAt: string
   updatedAt: string
 }
+
+export type FridgeCategory = "meat" | "seafood" | "vegetable" | "processed" | "seasoning" | "other"
+export type QuantityUnit = "count" | "g" | "kg" | "ml" | "l" | "pack" | "tbsp" | "tsp"
+
+export interface FridgeItem {
+  id: string
+  name: string
+  category: FridgeCategory
+  amount: number
+  unit: QuantityUnit
+  expiresOn?: string | null
+  source?: "manual" | "mfds" | "fallback"
+  createdAt: string
+  updatedAt: string
+}
+
+export interface FridgeListResponse {
+  items: FridgeItem[]
+}
+
+export interface FridgeCreateInput {
+  name: string
+  category?: FridgeCategory
+  amount: number
+  unit: QuantityUnit
+  expiresOn?: string
+}
+
+export interface FridgeUpdateInput {
+  name?: string
+  category?: FridgeCategory
+  amount?: number
+  unit?: QuantityUnit
+  expiresOn?: string | null
+}
+
+export interface FridgeConsumeItemInput {
+  itemId: string
+  amount: number
+  unit: QuantityUnit
+}
+
+export interface FridgeConsumeInput {
+  recipeId: string
+  resultId?: string
+  items: FridgeConsumeItemInput[]
+}
+
+export interface FridgeConsumeResult {
+  consumedItemId: string
+  beforeAmount: number
+  consumedAmount: number
+  consumedUnit: QuantityUnit
+  afterAmount: number
+  stockUnit: QuantityUnit
+}
+
+export interface FoodSearchItem {
+  name: string
+  category: FridgeCategory
+  defaultUnit: QuantityUnit
+  source: "mfds" | "fallback"
+}
+
+export interface FoodSearchResponse {
+  items: FoodSearchItem[]
+}
