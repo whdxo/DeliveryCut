@@ -1,6 +1,8 @@
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
   signOut,
   onAuthStateChanged,
   User,
@@ -33,6 +35,21 @@ export const signIn = async (email: string, password: string) => {
       email,
       password
     )
+    return { user: userCredential.user, error: null }
+  } catch (error: any) {
+    return { user: null, error: error.message }
+  }
+}
+
+/**
+ * 구글 계정으로 로그인
+ */
+export const signInWithGoogle = async () => {
+  try {
+    const provider = new GoogleAuthProvider()
+    provider.setCustomParameters({ prompt: "select_account" })
+
+    const userCredential = await signInWithPopup(auth, provider)
     return { user: userCredential.user, error: null }
   } catch (error: any) {
     return { user: null, error: error.message }

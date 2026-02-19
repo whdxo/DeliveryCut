@@ -32,7 +32,7 @@ DeliveryCut AI는 Firebase를 사용합니다:
 
 ```bash
 # Firebase Configuration
-NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyDr-usLA8c7bQJb5ZCqBIB7s4D6D9nAbRw
+NEXT_PUBLIC_FIREBASE_API_KEY=your-firebase-api-key-here
 NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=deliverycut-3a439.firebaseapp.com
 NEXT_PUBLIC_FIREBASE_PROJECT_ID=deliverycut-3a439
 NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=deliverycut-3a439.firebasestorage.app

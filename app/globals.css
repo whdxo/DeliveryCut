@@ -4,6 +4,18 @@
 
 @layer base {
   :root {
+    /* DeliveryCut Design System */
+    --color-primary: #3D8A5A;
+    --color-primary-light: #C8F0D8;
+    --color-bg: #FAF9F6;
+    --color-surface: #FFFFFF;
+    --color-muted: #F0EEE9;
+    --color-side: #EDECEA;
+    --color-border: #D1D0CD;
+    --color-text: #1A1918;
+    --color-text-secondary: #6D6C6A;
+    --color-text-muted: #9C9B99;
+
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
@@ -25,28 +37,6 @@
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
   }
-
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
-  }
 }
 
 @layer base {
@@ -54,6 +44,29 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    /* ✅ 한국어 폰트 우선, 시스템 폰트 fallback */
+    font-family: var(--font-noto), 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    /* ✅ 모바일 기본 폰트 사이즈 16px (브라우저 기본값 유지 = 확대 방지) */
+    font-size: 16px;
+    -webkit-text-size-adjust: 100%;
+  }
+}
+
+/* ✅ safe-area 유틸리티 — 아이폰 홈바/노치 대응 */
+@layer utilities {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+  /*
+    pb-nav-safe: 하단 네비(56px) + safe area + 여유(8px)
+    각 page의 main 하단 여백으로 사용
+  */
+  .pb-nav-safe {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom) + 8px);
   }
 }
