@@ -1,9 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { signUp, signInWithGoogle } from "@/lib/firebase/auth"
+import { signUp, signInWithGoogle, onAuthChange } from "@/lib/firebase/auth"
 import { NavBar } from "@/components/shared/PageLayout"
 
 const errorMessages: Record<string, string> = {
@@ -18,15 +18,24 @@ export default function SignupPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [passwordConfirm, setPasswordConfirm] = useState("")
-  const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // 이미 로그인한 사용자는 홈으로 리디렉션
+  useEffect(() => {
+    const unsubscribe = onAuthChange((user) => {
+      if (user) {
+        router.push("/home")
+      }
+    })
+    return () => unsubscribe()
+  }, [router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
-    // 클라이언트 유효성 검사
     if (password.length < 6) {
       setError("비밀번호는 6자 이상이어야 합니다")
       setLoading(false)
@@ -39,7 +48,7 @@ export default function SignupPage() {
       return
     }
 
-    const { error: authError } = await signUp(email, password)
+    const { error: authError } = await signUp(email.trim(), password)
 
     if (authError) {
       const code = typeof authError === 'string' ? authError : (authError as { code?: string })?.code || "unknown"
@@ -48,7 +57,6 @@ export default function SignupPage() {
       return
     }
 
-    // 회원가입 성공 → 자동 로그인됨 → 홈으로
     router.push("/home")
   }
 

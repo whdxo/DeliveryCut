@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, Suspense } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { signIn, signInWithGoogle } from "@/lib/firebase/auth"
+import { signIn, signInWithGoogle, onAuthChange } from "@/lib/firebase/auth"
 import { NavBar } from "@/components/shared/PageLayout"
 
 const errorMessages: Record<string, string> = {
@@ -22,19 +22,27 @@ function LoginForm() {
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // 이미 로그인한 사용자는 리디렉션
+  useEffect(() => {
+    const unsubscribe = onAuthChange((user) => {
+      if (user) {
+        router.replace(redirect)
+      }
+    })
+    return () => unsubscribe()
+  }, [router, redirect])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
-    const { error: authError } = await signIn(email, password)
+    const { error: authError } = await signIn(email.trim(), password)
 
     if (authError) {
-      // Firebase 에러 객체에서 코드를 추출하거나 메시지 기반 매핑
-      // authError가 문자열로 오기도 하므로 유연하게 처리
       const code = typeof authError === 'string' ? authError : (authError as { code?: string })?.code || "unknown"
       setError(errorMessages[code] || "로그인에 실패했습니다")
       setLoading(false)
