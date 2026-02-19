@@ -74,8 +74,12 @@ export async function POST(request: Request) {
   }
 
   if (error || !data) {
-    return jsonError(500, "INTERNAL_ERROR", "Failed to consume fridge items", error)
+    if (typeof error === "string" && (error.includes("permission-denied") || error.includes("Missing or insufficient permissions"))) {
+      return jsonError(403, "FORBIDDEN", "재료 차감 권한이 없습니다. Firestore rules에서 consumptionLogs 권한을 확인해주세요.", error)
+    }
+    return jsonError(500, "INTERNAL_ERROR", typeof error === "string" && error ? error : "Failed to consume fridge items", error)
   }
 
   return NextResponse.json({ consumed: data })
 }
+

@@ -1,12 +1,19 @@
 import { NextResponse } from "next/server"
-import { addFridgeItem, getFridgeItemsByUserId } from "@/lib/firebase"
+import {
+  addFridgeItem,
+  getFridgeItemsByUserId,
+  searchFoodCatalogItems,
+} from "@/lib/firebase"
 import { FRIDGE_CATEGORIES, QUANTITY_UNITS } from "@/lib/fridge/constants"
 import { isQuantityUnit } from "@/lib/fridge/unit"
+import { inferFallbackFood } from "@/lib/food/fallback"
+import { inferFoodByKeyword } from "@/lib/food/keyword-rules"
 import type {
   ApiError,
   FridgeCategory,
   FridgeCreateInput,
   FridgeListResponse,
+  FoodSearchItem,
 } from "@/lib/types/api"
 
 const jsonError = (status: number, code: string, message: string, details?: unknown) => {
@@ -23,6 +30,80 @@ const isValidDateOnly = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value)
 
 const isValidCategory = (value: string): value is FridgeCategory => {
   return FRIDGE_CATEGORIES.some((item) => item.value === value)
+}
+
+const normalize = (value: string) => value.trim().toLowerCase()
+
+const formatDateOnly = (date: Date) => {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, "0")
+  const d = String(date.getDate()).padStart(2, "0")
+  return `${y}-${m}-${d}`
+}
+
+const addDays = (days: number) => {
+  const now = new Date()
+  const next = new Date(now)
+  next.setDate(next.getDate() + days)
+  return formatDateOnly(next)
+}
+
+const pickBestMatch = (name: string, items: FoodSearchItem[]) => {
+  const key = normalize(name)
+  const score = (item: FoodSearchItem) => {
+    const candidates = [item.displayName, item.subCategory, item.name].filter((v): v is string => !!v)
+    let best = Number.MAX_SAFE_INTEGER
+    for (const candidate of candidates) {
+      const value = normalize(candidate)
+      if (value === key) best = Math.min(best, 0)
+      else if (value.startsWith(key) || key.startsWith(value)) best = Math.min(best, 1)
+      else if (value.includes(key) || key.includes(value)) best = Math.min(best, 2)
+    }
+    return best
+  }
+
+  return [...items]
+    .sort((a, b) => {
+      const sa = score(a)
+      const sb = score(b)
+      if (sa !== sb) return sa - sb
+      const al = a.displayName ?? a.subCategory ?? a.name
+      const bl = b.displayName ?? b.subCategory ?? b.name
+      return al.localeCompare(bl, "ko")
+    })
+    .find((item) => score(item) < Number.MAX_SAFE_INTEGER) ?? null
+}
+
+
+const resolveFoodMeta = async (name: string) => {
+  const catalog = await searchFoodCatalogItems(name, 10)
+  const fromCatalog = !catalog.error ? pickBestMatch(name, catalog.data) : null
+  if (fromCatalog) return fromCatalog
+
+
+  const fallback = inferFallbackFood(name)
+  if (fallback) {
+    return {
+      name: fallback.name,
+      category: fallback.category,
+      subCategory: fallback.subCategory,
+      defaultUnit: fallback.defaultUnit,
+      source: "fallback" as const,
+    }
+  }
+
+  const keyword = inferFoodByKeyword(name)
+  if (keyword) {
+    return {
+      name,
+      category: keyword.category,
+      subCategory: keyword.subCategory,
+      defaultUnit: keyword.defaultUnit,
+      source: "fallback" as const,
+    }
+  }
+
+  return null
 }
 
 export async function GET(request: Request) {
@@ -64,7 +145,8 @@ export async function POST(request: Request) {
   const name = typeof body.name === "string" ? body.name.trim() : ""
   const amount = Number(body.amount)
   const unit = typeof body.unit === "string" ? body.unit : ""
-  const category = typeof body.category === "string" ? body.category : "other"
+  const rawCategory = typeof body.category === "string" ? body.category : undefined
+  const rawSubCategory = typeof body.subCategory === "string" ? body.subCategory.trim() : ""
   const expiresOn = typeof body.expiresOn === "string" ? body.expiresOn.trim() : ""
 
   if (!name) {
@@ -79,7 +161,7 @@ export async function POST(request: Request) {
     return jsonError(400, "INVALID_INPUT", `unit must be one of: ${QUANTITY_UNITS.map((u) => u.value).join(", ")}`)
   }
 
-  if (!isValidCategory(category)) {
+  if (rawCategory && !isValidCategory(rawCategory)) {
     return jsonError(400, "INVALID_INPUT", "invalid category")
   }
 
@@ -87,12 +169,19 @@ export async function POST(request: Request) {
     return jsonError(400, "INVALID_INPUT", "expiresOn must be YYYY-MM-DD format")
   }
 
+  const resolved = await resolveFoodMeta(name)
+  const category = rawCategory && rawCategory !== "other" ? rawCategory : resolved?.category ?? "other"
+  const subCategory = rawSubCategory || resolved?.displayName || resolved?.subCategory || name
+  const fallbackMeta = inferFallbackFood(name)
+  const resolvedExpiresOn = expiresOn || (fallbackMeta?.defaultShelfLifeDays ? addDays(fallbackMeta.defaultShelfLifeDays) : undefined)
+
   const { item, error } = await addFridgeItem(userId, {
     name,
     category,
+    subCategory,
     amount,
     unit,
-    expiresOn: expiresOn || undefined,
+    expiresOn: resolvedExpiresOn,
   })
 
   if (error || !item) {
@@ -101,3 +190,4 @@ export async function POST(request: Request) {
 
   return NextResponse.json(item)
 }
+
