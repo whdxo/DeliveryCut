@@ -20,6 +20,9 @@ export {
   updateFridgeItem,
   deleteFridgeItem,
   consumeFridgeItems,
+  upsertFoodCatalogItems,
+  searchFoodCatalogItems,
   saveMenuPlan,
   getUserMenuPlans,
 } from "./firestore"
+
