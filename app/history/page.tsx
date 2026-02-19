@@ -1,181 +1,246 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { onAuthChange } from "@/lib/firebase/auth"
+import { getUserMenuPlans } from "@/lib/firebase/firestore"
 import { NavBar, MobileBottomNav } from "@/components/shared/PageLayout"
+import type { StoredMenuPlan } from "@/lib/types/api"
 
-const FILTERS = ["전체", "5분 이하", "10분", "15분 이상"]
+type TimeFilter = "all" | 5 | 10 | 15
 
-const MOCK_HISTORY = [
-  {
-    date: "오늘 · 2026. 2. 17",
-    items: [
-      {
-        id: 1,
-        name: "계란 볶음밥",
-        tags: ["5분", "3가지 재료", "팬"],
-        time: "방금 전 2:30",
-        savedMenus: 3,
-        totalTime: "2분 5:15",
-      },
-      {
-        id: 2,
-        name: "게란 토스트",
-        tags: ["재료", "계란", "바나나", "치즈"],
-        time: "전자레인지 2분 5:15",
-        savedMenus: 1,
-        totalTime: "7:20",
-      },
-    ],
-  },
-  {
-    date: "어제 · 2026. 2. 16",
-    items: [
-      {
-        id: 3,
-        name: "고구마 치즈구이",
-        tags: ["고구마", "모짜렐라치즈", "버터"],
-        time: "어제",
-        savedMenus: 2,
-        totalTime: "8분",
-      },
-    ],
-  },
-]
+// 날짜 그룹핑 헬퍼
+const groupByDate = (plans: StoredMenuPlan[]) => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const todayTime = today.getTime()
+  const yesterdayTime = todayTime - 86400000
+
+  const groups: Record<string, StoredMenuPlan[]> = {}
+
+  plans.forEach((plan) => {
+    const planDate = new Date(plan.createdAt)
+    planDate.setHours(0, 0, 0, 0)
+    const planTime = planDate.getTime()
+
+    let label: string
+    if (planTime === todayTime) {
+      label = "오늘"
+    } else if (planTime === yesterdayTime) {
+      label = "어제"
+    } else {
+      label = new Date(plan.createdAt).toLocaleDateString("ko-KR", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    }
+
+    if (!groups[label]) groups[label] = []
+    groups[label].push(plan)
+  })
+
+  return groups
+}
 
 export default function HistoryPage() {
-  const [activeFilter, setActiveFilter] = useState("전체")
+  const router = useRouter()
+  const [userId, setUserId] = useState<string | null>(null)
+  const [history, setHistory] = useState<StoredMenuPlan[]>([])
+  const [filter, setFilter] = useState<TimeFilter>("all")
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // 인증 체크
+  useEffect(() => {
+    const unsubscribe = onAuthChange((user) => {
+      if (!user) {
+        router.replace("/login?redirect=/history")
+      } else {
+        setUserId(user.uid)
+      }
+    })
+    return () => unsubscribe()
+  }, [router])
+
+  // 히스토리 조회
+  useEffect(() => {
+    if (!userId) return
+
+    const fetchHistory = async () => {
+      setLoading(true)
+      try {
+        const { data, error: fetchError } = await getUserMenuPlans(userId)
+        if (fetchError) {
+          setError("히스토리를 불러오는데 실패했습니다")
+        } else {
+          setHistory(data || [])
+        }
+      } catch (err) {
+        setError("알 수 없는 오류가 발생했습니다")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchHistory()
+  }, [userId])
+
+  // 필터링
+  const filteredHistory = history.filter((item) => {
+    if (filter === "all") return true
+    // 첫 번째 메뉴의 timeMin으로 필터링
+    return item.output.menuOptions[0]?.timeMin === filter
+  })
+
+  const groupedHistory = groupByDate(filteredHistory)
 
   return (
     <div className="min-h-screen bg-dc-bg">
-      {/* NavBar */}
       <div className="sticky top-0 z-50 w-full border-b border-dc-border bg-dc-surface">
         <NavBar variant="app" />
       </div>
 
-      {/* Body */}
       <div className="flex w-full">
         <div className="flex-1 bg-dc-side border-r border-dc-border hidden lg:block" />
 
-        <div className="w-full lg:w-[960px] lg:flex-none px-5 lg:px-10 py-6 lg:py-12 flex flex-col gap-6 pb-24 lg:pb-12">
-
-          {/* Header */}
+        <div className="w-full lg:w-[960px] lg:flex-none px-5 lg:px-10 py-6 lg:py-12 flex flex-col gap-6 lg:gap-8 pb-24 lg:pb-12">
           <div className="flex flex-col gap-1">
-            <h1 className="text-dc-text text-2xl lg:text-[28px] font-bold">히스토리</h1>
-            <p className="text-dc-text-secondary text-xs lg:text-sm">
-              이전에 만든 메뉴 플랜을 다시 사용해보세요
+            <h1 className="text-dc-text text-2xl lg:text-[28px] font-bold">내 히스토리</h1>
+            <p className="text-dc-text-secondary text-sm">
+              이전에 생성한 메뉴 목록을 확인하세요
             </p>
           </div>
 
-          {/* Filters */}
-          <div className="flex flex-wrap gap-2">
-            {FILTERS.map((filter) => (
-              <button
-                key={filter}
-                onClick={() => setActiveFilter(filter)}
-                className={`h-8 px-4 rounded-full text-[13px] font-medium transition-colors ${
-                  activeFilter === filter
-                    ? "bg-dc-primary text-white"
-                    : "bg-dc-muted text-dc-text-secondary hover:bg-dc-border"
+          {/* 필터 칩 */}
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => setFilter("all")}
+              className={`h-9 px-4 rounded-full text-sm font-medium transition-colors ${filter === "all"
+                  ? "bg-dc-primary text-white"
+                  : "bg-dc-muted text-dc-text-secondary hover:bg-dc-border"
                 }`}
+            >
+              전체
+            </button>
+            <button
+              onClick={() => setFilter(5)}
+              className={`h-9 px-4 rounded-full text-sm font-medium transition-colors ${filter === 5
+                  ? "bg-dc-primary text-white"
+                  : "bg-dc-muted text-dc-text-secondary hover:bg-dc-border"
+                }`}
+            >
+              5분 이하
+            </button>
+            <button
+              onClick={() => setFilter(10)}
+              className={`h-9 px-4 rounded-full text-sm font-medium transition-colors ${filter === 10
+                  ? "bg-dc-primary text-white"
+                  : "bg-dc-muted text-dc-text-secondary hover:bg-dc-border"
+                }`}
+            >
+              10분
+            </button>
+            <button
+              onClick={() => setFilter(15)}
+              className={`h-9 px-4 rounded-full text-sm font-medium transition-colors ${filter === 15
+                  ? "bg-dc-primary text-white"
+                  : "bg-dc-muted text-dc-text-secondary hover:bg-dc-border"
+                }`}
+            >
+              15분
+            </button>
+          </div>
+
+          {/* 로딩 */}
+          {loading && (
+            <div className="flex items-center justify-center py-12 text-dc-text-secondary">
+              로딩 중...
+            </div>
+          )}
+
+          {/* 에러 */}
+          {!loading && error && (
+            <div className="flex flex-col items-center justify-center py-12 gap-4">
+              <div className="text-dc-text font-semibold">{error}</div>
+              <button
+                onClick={() => window.location.reload()}
+                className="h-10 px-4 bg-dc-primary text-white text-sm font-medium rounded-lg hover:bg-[#2d6b45] transition-colors"
               >
-                {filter}
+                다시 시도
               </button>
-            ))}
-          </div>
+            </div>
+          )}
 
-          {/* History List */}
-          <div className="flex flex-col gap-6">
-            {MOCK_HISTORY.map((group) => (
-              <div key={group.date} className="flex flex-col gap-3">
-                <div className="text-dc-text-muted text-[12px] font-semibold">{group.date}</div>
+          {/* 빈 히스토리 */}
+          {!loading && !error && filteredHistory.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-12 gap-4">
+              <div className="text-4xl">📋</div>
+              <div className="text-dc-text font-semibold">아직 생성한 메뉴가 없어요</div>
+              <Link
+                href="/home"
+                className="h-10 px-4 bg-dc-primary text-white text-sm font-medium rounded-lg hover:bg-[#2d6b45] transition-colors flex items-center"
+              >
+                메뉴 만들러 가기
+              </Link>
+            </div>
+          )}
 
-                {/* Desktop: 3-col grid */}
-                <div className="hidden lg:grid grid-cols-3 gap-4">
-                  {group.items.map((item) => (
-                    <HistoryCard key={item.id} item={item} />
-                  ))}
+          {/* 히스토리 목록 */}
+          {!loading && !error && filteredHistory.length > 0 && (
+            <div className="flex flex-col gap-6">
+              {Object.entries(groupedHistory).map(([date, plans]) => (
+                <div key={date} className="flex flex-col gap-3">
+                  <div className="text-dc-text text-sm font-semibold">{date}</div>
+                  <div className="flex flex-col gap-3">
+                    {plans.map((plan) => (
+                      <div
+                        key={plan.resultId}
+                        className="bg-dc-surface rounded-xl border border-dc-border p-5 flex flex-col gap-3"
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex flex-col gap-1">
+                            <div className="text-dc-text font-semibold">
+                              {plan.output.menuOptions[0]?.title || "메뉴 이름 없음"}
+                            </div>
+                            <div className="text-dc-text-secondary text-xs">
+                              {new Date(plan.createdAt).toLocaleTimeString("ko-KR", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </div>
+                          </div>
+                          <Link
+                            href={`/result?resultId=${plan.resultId}`}
+                            className="h-9 px-4 bg-dc-primary text-white text-sm font-medium rounded-lg hover:bg-[#2d6b45] transition-colors flex items-center flex-none"
+                          >
+                            다시 보기
+                          </Link>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {plan.output.menuOptions.slice(0, 3).map((menu, idx) => (
+                            <span
+                              key={idx}
+                              className="text-xs text-dc-text-secondary bg-dc-muted px-2 py-1 rounded-full"
+                            >
+                              {menu.title}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-
-                {/* Mobile: list */}
-                <div className="lg:hidden flex flex-col gap-3">
-                  {group.items.map((item) => (
-                    <MobileHistoryCard key={item.id} item={item} />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="flex-1 bg-dc-side border-l border-dc-border hidden lg:block" />
       </div>
 
       <MobileBottomNav />
-    </div>
-  )
-}
-
-function HistoryCard({ item }: { item: typeof MOCK_HISTORY[0]["items"][0] }) {
-  return (
-    <div className="bg-dc-surface rounded-2xl border border-dc-border p-5 flex flex-col gap-3">
-      <div className="flex items-start justify-between">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-semibold text-dc-primary bg-dc-primary-light px-2 py-0.5 rounded-full">
-              전자레인지 2분 {item.totalTime}
-            </span>
-          </div>
-          <div className="text-dc-text text-sm font-bold mt-1">{item.name}</div>
-          <div className="text-dc-text-secondary text-xs">{item.tags.join(", ")}</div>
-        </div>
-      </div>
-      <div className="flex gap-2 mt-1">
-        <Link
-          href={`/result?history=${item.id}`}
-          className="flex-1 h-9 bg-dc-primary text-white text-[13px] font-semibold rounded-lg flex items-center justify-center hover:bg-[#2d6b45] transition-colors"
-        >
-          다시 사용하기
-        </Link>
-        <Link
-          href={`/result?history=${item.id}`}
-          className="h-9 px-3 bg-dc-muted text-dc-text-secondary text-[13px] font-medium rounded-lg flex items-center justify-center hover:bg-dc-border transition-colors"
-        >
-          보기
-        </Link>
-      </div>
-    </div>
-  )
-}
-
-function MobileHistoryCard({ item }: { item: typeof MOCK_HISTORY[0]["items"][0] }) {
-  return (
-    <div className="bg-dc-surface rounded-2xl border border-dc-border p-4 flex flex-col gap-3">
-      <div className="flex items-start gap-3">
-        <div className="flex-1 flex flex-col gap-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[10px] font-semibold text-dc-primary bg-dc-primary-light px-2 py-0.5 rounded-full">
-              {item.time}
-            </span>
-          </div>
-          <div className="text-dc-text text-sm font-bold">{item.name}</div>
-          <div className="text-dc-text-secondary text-xs">{item.tags.join(", ")}</div>
-        </div>
-      </div>
-      <div className="flex gap-2">
-        <Link
-          href={`/result?history=${item.id}`}
-          className="flex-1 h-10 bg-dc-primary text-white text-[13px] font-semibold rounded-xl flex items-center justify-center hover:bg-[#2d6b45] transition-colors"
-        >
-          다시 사용하기
-        </Link>
-        <Link
-          href={`/result?history=${item.id}`}
-          className="h-10 px-3 bg-dc-muted text-dc-text-secondary text-[13px] font-medium rounded-xl flex items-center justify-center hover:bg-dc-border transition-colors"
-        >
-          보기
-        </Link>
-      </div>
     </div>
   )
 }

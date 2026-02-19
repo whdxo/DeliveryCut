@@ -43,11 +43,12 @@ export async function POST(request: Request) {
       output: outputValidation.data,
     }
 
-    // 🔗 Firestore에 저장
+    // 🔗 Firestore에 저장 (userId 포함)
+    const { userId, ...inputData } = payload as any
     const saveResponse = await saveResult(resultId, {
-      input: inputValidation.data,
+      input: inputData,
       output: outputValidation.data,
-      userId: null,
+      userId: userId || null,
     })
 
     if (saveResponse.error) {

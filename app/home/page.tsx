@@ -48,12 +48,14 @@ export default function HomePage() {
   const [selectedTools, setSelectedTools] = useState<string[]>(["전자레인지"])
   const [ingredients, setIngredients] = useState("")
   const [showLoginPrompt, setShowLoginPrompt] = useState(false)
+  const [user, setUser] = useState<any>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const unsubscribe = onAuthChange((user) => {
-      setShowLoginPrompt(!user)
+    const unsubscribe = onAuthChange((firebaseUser) => {
+      setUser(firebaseUser)
+      setShowLoginPrompt(!firebaseUser)
     })
 
     return () => unsubscribe()
@@ -75,6 +77,7 @@ export default function HomePage() {
       timeLimitMin: Number.parseInt(selectedTime, 10) as 5 | 10 | 15,
       tools: selectedTools.map(toTool),
       ingredientsText: ingredients.trim(),
+      userId: user?.uid || null,
     }
 
     try {
@@ -136,8 +139,8 @@ export default function HomePage() {
                       key={t}
                       onClick={() => setSelectedTime(t)}
                       className={`flex-1 h-10 rounded-lg text-[13px] font-medium transition-colors ${selectedTime === t
-                          ? "bg-dc-primary text-white font-semibold"
-                          : "bg-dc-muted text-dc-text-secondary hover:bg-dc-border"
+                        ? "bg-dc-primary text-white font-semibold"
+                        : "bg-dc-muted text-dc-text-secondary hover:bg-dc-border"
                         }`}
                     >
                       {t}
@@ -154,8 +157,8 @@ export default function HomePage() {
                       key={tool}
                       onClick={() => toggleTool(tool)}
                       className={`h-9 px-4 rounded-full text-[13px] font-medium transition-colors ${selectedTools.includes(tool)
-                          ? "bg-dc-primary text-white"
-                          : "bg-dc-muted text-dc-text-secondary hover:bg-dc-border"
+                        ? "bg-dc-primary text-white"
+                        : "bg-dc-muted text-dc-text-secondary hover:bg-dc-border"
                         }`}
                     >
                       {tool}

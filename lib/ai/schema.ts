@@ -127,6 +127,14 @@ export const validateGenerateInput = (
     errors.push("dislikedIngredientsText must be a string")
   }
 
+  if (
+    data.userId !== undefined &&
+    data.userId !== null &&
+    typeof data.userId !== "string"
+  ) {
+    errors.push("userId must be a string or null")
+  }
+
   if (errors.length > 0) {
     return { valid: false, errors }
   }
@@ -138,6 +146,7 @@ export const validateGenerateInput = (
       tools: data.tools as GenerateInput["tools"],
       ingredientsText: data.ingredientsText!.trim(),
       dislikedIngredientsText: data.dislikedIngredientsText?.trim() || undefined,
+      userId: data.userId || null,
     },
   }
 }
