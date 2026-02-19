@@ -79,7 +79,7 @@ export default function HistoryPage() {
         } else {
           setHistory(data || [])
         }
-      } catch (err) {
+      } catch {
         setError("알 수 없는 오류가 발생했습니다")
       } finally {
         setLoading(false)
@@ -128,8 +128,8 @@ export default function HistoryPage() {
                 key={f}
                 onClick={() => setActiveFilter(f)}
                 className={`flex-none h-11 px-4 rounded-full text-[13px] font-medium transition-colors whitespace-nowrap ${activeFilter === f
-                    ? "bg-dc-primary text-white"
-                    : "bg-dc-muted text-dc-text-secondary hover:bg-dc-border"
+                  ? "bg-dc-primary text-white"
+                  : "bg-dc-muted text-dc-text-secondary hover:bg-dc-border"
                   }`}
               >
                 {f}

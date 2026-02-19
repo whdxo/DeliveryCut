@@ -59,7 +59,7 @@ export default function HomePage() {
   const [selectedTools, setSelectedTools] = useState<string[]>(["전자레인지"])
   const [ingredients, setIngredients] = useState("")
   const [showLoginPrompt, setShowLoginPrompt] = useState(false)
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<import("firebase/auth").User | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 

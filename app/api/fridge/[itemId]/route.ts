@@ -21,7 +21,7 @@ const isValidCategory = (value: string): value is FridgeCategory => {
 
 export async function PATCH(
   request: Request,
-  context: { params: { itemId: string } }
+  context: { params: Promise<{ itemId: string }> }
 ) {
   const userId = getUserIdFromHeader(request)
   if (!userId) {

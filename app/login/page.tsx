@@ -30,12 +30,12 @@ function LoginForm() {
     setLoading(true)
     setError(null)
 
-    const { user, error: authError } = await signIn(email, password)
+    const { error: authError } = await signIn(email, password)
 
     if (authError) {
       // Firebase 에러 객체에서 코드를 추출하거나 메시지 기반 매핑
       // authError가 문자열로 오기도 하므로 유연하게 처리
-      const code = typeof authError === 'string' ? authError : (authError as any).code
+      const code = typeof authError === 'string' ? authError : (authError as { code?: string })?.code || "unknown"
       setError(errorMessages[code] || "로그인에 실패했습니다")
       setLoading(false)
       return
@@ -47,7 +47,7 @@ function LoginForm() {
   const handleGoogleLogin = async () => {
     setLoading(true)
     setError(null)
-    const { user, error: authError } = await signInWithGoogle()
+    const { error: authError } = await signInWithGoogle()
 
     if (authError) {
       setError("구글 로그인에 실패했습니다")

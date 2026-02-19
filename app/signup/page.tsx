@@ -39,10 +39,10 @@ export default function SignupPage() {
       return
     }
 
-    const { user, error: authError } = await signUp(email, password)
+    const { error: authError } = await signUp(email, password)
 
     if (authError) {
-      const code = typeof authError === 'string' ? authError : (authError as any).code
+      const code = typeof authError === 'string' ? authError : (authError as { code?: string })?.code || "unknown"
       setError(errorMessages[code] || "회원가입에 실패했습니다")
       setLoading(false)
       return
@@ -55,7 +55,7 @@ export default function SignupPage() {
   const handleGoogleLogin = async () => {
     setLoading(true)
     setError(null)
-    const { user, error: authError } = await signInWithGoogle()
+    const { error: authError } = await signInWithGoogle()
 
     if (authError) {
       setError("구글 로그인에 실패했습니다")

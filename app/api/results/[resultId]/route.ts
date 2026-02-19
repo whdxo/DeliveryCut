@@ -3,9 +3,9 @@ import { getResult } from "@/lib/firebase/results"
 
 export async function GET(
   _request: Request,
-  { params }: { params: { resultId: string } }
+  { params }: { params: Promise<{ resultId: string }> }
 ) {
-  const { resultId } = params
+  const { resultId } = await params
 
   if (!resultId) {
     return NextResponse.json(
@@ -23,9 +23,10 @@ export async function GET(
       )
     }
     return NextResponse.json(result)
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
     return NextResponse.json(
-      { error: { code: "INTERNAL_ERROR", message: "Failed to fetch result", details: error.message } },
+      { error: { code: "INTERNAL_ERROR", message: "Failed to fetch result", details: errorMessage } },
       { status: 500 }
     )
   }
