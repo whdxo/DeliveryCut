@@ -17,7 +17,7 @@ const groupByDate = (plans: StoredMenuPlan[]) => {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const todayTime = today.getTime()
-  const yesterdayTime = todayTime - 86400000
+  const yesterdayTime = todayTime - 24 * 60 * 60 * 1000
 
   const groups: Record<string, StoredMenuPlan[]> = {}
 
@@ -226,12 +226,6 @@ function HistoryCard({ plan }: { plan: StoredMenuPlan }) {
           className="flex-1 h-11 bg-dc-primary text-white text-[13px] font-semibold rounded-xl flex items-center justify-center hover:bg-[#2d6b45] transition-colors"
         >
           다시 사용하기
-        </Link>
-        <Link
-          href={`/result?resultId=${plan.resultId}`}
-          className="h-11 px-4 bg-dc-muted text-dc-text-secondary text-[13px] font-medium rounded-xl flex items-center justify-center hover:bg-dc-border transition-colors"
-        >
-          보기
         </Link>
       </div>
     </div>

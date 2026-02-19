@@ -51,7 +51,7 @@ export default function SignupPage() {
     const { error: authError } = await signUp(email.trim(), password)
 
     if (authError) {
-      const code = typeof authError === 'string' ? authError : (authError as { code?: string })?.code || "unknown"
+      const code = (authError as { code?: string })?.code ?? "unknown"
       setError(errorMessages[code] || "회원가입에 실패했습니다")
       setLoading(false)
       return
