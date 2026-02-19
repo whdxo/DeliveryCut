@@ -9,6 +9,7 @@ import { FRIDGE_CATEGORIES, QUANTITY_UNITS } from "@/lib/fridge/constants"
 import { isQuantityUnit } from "@/lib/fridge/unit"
 import { fetchMfdsFoodsByQuery } from "@/lib/food/catalog"
 import { inferFallbackFood } from "@/lib/food/fallback"
+import { inferFoodByKeyword } from "@/lib/food/keyword-rules"
 import type {
   ApiError,
   FridgeCategory,
@@ -75,27 +76,6 @@ const pickBestMatch = (name: string, items: FoodSearchItem[]) => {
     .find((item) => score(item) < Number.MAX_SAFE_INTEGER) ?? null
 }
 
-const inferByKeyword = (name: string): Pick<FoodSearchItem, "category" | "subCategory" | "defaultUnit"> | null => {
-  const key = normalize(name)
-  const meatKeywords = ["소고기", "쇠고기", "돼지고기", "안창살", "살치살", "등심", "채끝", "갈비", "삼겹", "목살", "사태", "양지"]
-  const vegetableKeywords = ["호박", "양파", "대파", "마늘", "파", "감자", "당근", "버섯", "배추", "상추", "오이", "토마토"]
-  const seasoningKeywords = ["간장", "고추장", "된장", "소금", "설탕", "식초", "후추"]
-
-  if (meatKeywords.some((k) => key.includes(k))) {
-    return { category: "meat", subCategory: name, defaultUnit: "g" }
-  }
-
-  if (vegetableKeywords.some((k) => key.includes(k))) {
-    return { category: "vegetable", subCategory: name, defaultUnit: "count" }
-  }
-
-  if (seasoningKeywords.some((k) => key.includes(k))) {
-    return { category: "seasoning", subCategory: name, defaultUnit: "ml" }
-  }
-
-  return null
-}
-
 const resolveFoodMeta = async (name: string) => {
   const catalog = await searchFoodCatalogItems(name, 10)
   const fromCatalog = !catalog.error ? pickBestMatch(name, catalog.data) : null
@@ -119,7 +99,7 @@ const resolveFoodMeta = async (name: string) => {
     }
   }
 
-  const keyword = inferByKeyword(name)
+  const keyword = inferFoodByKeyword(name)
   if (keyword) {
     return {
       name,
@@ -217,4 +197,3 @@ export async function POST(request: Request) {
 
   return NextResponse.json(item)
 }
-

@@ -42,6 +42,14 @@ export default function FridgePage() {
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1)
   const [selectedFood, setSelectedFood] = useState<FoodSearchItem | null>(null)
 
+  const resetFoodSuggestions = () => {
+    setFoodSuggestions([])
+    setFoodSearchLoading(false)
+    setShowSuggestions(false)
+    setActiveSuggestionIndex(-1)
+    setSelectedFood(null)
+  }
+
   useEffect(() => {
     const unsubscribe = onAuthChange((user) => {
       if (!user) {
@@ -88,10 +96,7 @@ export default function FridgePage() {
 
   useEffect(() => {
     if (!showAddModal) {
-      setFoodSuggestions([])
-      setFoodSearchLoading(false)
-      setShowSuggestions(false)
-      setActiveSuggestionIndex(-1)
+      resetFoodSuggestions()
       return
     }
 
@@ -144,11 +149,7 @@ export default function FridgePage() {
     setFormExpiresOn("")
     setEditingItem(null)
 
-    setFoodSuggestions([])
-    setFoodSearchLoading(false)
-    setShowSuggestions(false)
-    setActiveSuggestionIndex(-1)
-    setSelectedFood(null)
+    resetFoodSuggestions()
   }
 
   const openAddModal = () => {
@@ -165,11 +166,7 @@ export default function FridgePage() {
     setEditingItem(item)
     setShowAddModal(true)
 
-    setFoodSuggestions([])
-    setFoodSearchLoading(false)
-    setShowSuggestions(false)
-    setActiveSuggestionIndex(-1)
-    setSelectedFood(null)
+    resetFoodSuggestions()
   }
 
   const selectSuggestion = (item: FoodSearchItem) => {
@@ -279,11 +276,7 @@ export default function FridgePage() {
     setEditingItem(null)
     setShowAddModal(true)
 
-    setFoodSuggestions([])
-    setFoodSearchLoading(false)
-    setShowSuggestions(false)
-    setActiveSuggestionIndex(-1)
-    setSelectedFood(null)
+    resetFoodSuggestions()
   }
 
   const handleQuickStart = () => {
@@ -680,7 +673,3 @@ export default function FridgePage() {
     </div>
   )
 }
-
-
-
-

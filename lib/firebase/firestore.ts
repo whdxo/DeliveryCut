@@ -347,7 +347,10 @@ export const consumeFridgeItems = async (userId: string, input: FridgeConsumeInp
         const fallbackResult = await runConsumeTransaction(false)
         return { data: fallbackResult, error: null }
       } catch (fallbackError: any) {
-        return { data: null, error: String(fallbackError?.message ?? fallbackError) }
+        return {
+          data: null,
+          error: `Fallback consume failed after permission-denied (${message}): ${String(fallbackError?.message ?? fallbackError)}`,
+        }
       }
     }
 
@@ -465,12 +468,14 @@ export const searchFoodCatalogItems = async (q: string, max = 10) => {
 
     const rawItems = [...merged.values()]
       .sort((a, b) => {
-        const aKey = normalizeFoodCatalogKey(a.displayName ?? a.name)
-        const bKey = normalizeFoodCatalogKey(b.displayName ?? b.name)
+        const aSortKey = a.displayName ?? a.subCategory ?? a.name
+        const bSortKey = b.displayName ?? b.subCategory ?? b.name
+        const aKey = normalizeFoodCatalogKey(aSortKey)
+        const bKey = normalizeFoodCatalogKey(bSortKey)
         const ap = aKey.startsWith(keyword) ? 0 : 1
         const bp = bKey.startsWith(keyword) ? 0 : 1
         if (ap !== bp) return ap - bp
-        return (a.displayName ?? a.name).localeCompare((b.displayName ?? b.name), "ko")
+        return aSortKey.localeCompare(bSortKey, "ko")
       })
 
     const deduped = new Map<string, FoodSearchItem>()
@@ -525,14 +530,3 @@ export const getUserMenuPlans = async (userId: string) => {
     return { data: null, error: error.message }
   }
 }
-
-
-
-
-
-
-
-
-
-
-

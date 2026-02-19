@@ -89,21 +89,23 @@ function findBestFridgeMatch(query: string, fridgeItems: FridgeItem[]) {
   const key = normalizeName(query)
   if (!key) return null
 
-  const exact = fridgeItems.find((item) => normalizeName(item.name) === key)
-  if (exact) return exact
-
-  const prefix = fridgeItems.find((item) => {
+  const score = (item: FridgeItem) => {
     const itemKey = normalizeName(item.name)
-    return itemKey.startsWith(key) || key.startsWith(itemKey)
-  })
-  if (prefix) return prefix
+    if (!itemKey) return Number.MAX_SAFE_INTEGER
+    if (itemKey === key) return 0
+    if (itemKey.startsWith(key) || key.startsWith(itemKey)) return 1
+    if (itemKey.includes(key) || key.includes(itemKey)) return 2
+    return Number.MAX_SAFE_INTEGER
+  }
 
-  const includes = fridgeItems.find((item) => {
-    const itemKey = normalizeName(item.name)
-    return itemKey.includes(key) || key.includes(itemKey)
-  })
-
-  return includes ?? null
+  return [...fridgeItems]
+    .sort((a, b) => {
+      const sa = score(a)
+      const sb = score(b)
+      if (sa !== sb) return sa - sb
+      return normalizeName(a.name).length - normalizeName(b.name).length
+    })
+    .find((item) => score(item) < Number.MAX_SAFE_INTEGER) ?? null
 }
 
 function ResultContent() {
@@ -487,4 +489,3 @@ export default function ResultPage() {
     </Suspense>
   )
 }
-

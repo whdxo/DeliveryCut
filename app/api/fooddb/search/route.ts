@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { searchFoodCatalogItems, upsertFoodCatalogItems } from "@/lib/firebase"
-import { fetchMfdsFoodsByQuery, buildFallbackCatalogItems } from "@/lib/food/catalog"
+import { fetchMfdsFoodsByQuery } from "@/lib/food/catalog"
 import { searchFallbackFoods } from "@/lib/food/fallback"
 import type { FoodSearchResponse } from "@/lib/types/api"
 
@@ -35,11 +35,9 @@ export async function GET(request: Request) {
   }))
 
   if (fallbackItems.length > 0) {
-    const catalogFallback = buildFallbackCatalogItems()
-    await upsertFoodCatalogItems(catalogFallback)
+    await upsertFoodCatalogItems(fallbackItems)
   }
 
   const response: FoodSearchResponse = { items: fallbackItems }
   return NextResponse.json(response)
 }
-
