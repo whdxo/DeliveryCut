@@ -3,11 +3,9 @@ import {
   addFridgeItem,
   getFridgeItemsByUserId,
   searchFoodCatalogItems,
-  upsertFoodCatalogItems,
 } from "@/lib/firebase"
 import { FRIDGE_CATEGORIES, QUANTITY_UNITS } from "@/lib/fridge/constants"
 import { isQuantityUnit } from "@/lib/fridge/unit"
-import { fetchMfdsFoodsByQuery } from "@/lib/food/catalog"
 import { inferFallbackFood } from "@/lib/food/fallback"
 import { inferFoodByKeyword } from "@/lib/food/keyword-rules"
 import type {
@@ -76,17 +74,12 @@ const pickBestMatch = (name: string, items: FoodSearchItem[]) => {
     .find((item) => score(item) < Number.MAX_SAFE_INTEGER) ?? null
 }
 
+
 const resolveFoodMeta = async (name: string) => {
   const catalog = await searchFoodCatalogItems(name, 10)
   const fromCatalog = !catalog.error ? pickBestMatch(name, catalog.data) : null
   if (fromCatalog) return fromCatalog
 
-  const mfdsItems = await fetchMfdsFoodsByQuery(name)
-  if (mfdsItems.length > 0) {
-    await upsertFoodCatalogItems(mfdsItems)
-    const best = pickBestMatch(name, mfdsItems)
-    if (best) return best
-  }
 
   const fallback = inferFallbackFood(name)
   if (fallback) {
@@ -197,3 +190,4 @@ export async function POST(request: Request) {
 
   return NextResponse.json(item)
 }
+
