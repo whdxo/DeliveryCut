@@ -193,9 +193,15 @@ function HistoryContent() {
   const fetchPlannerPlans = async (uid: string) => {
     setLoadingPlans(true)
     setPlansError(null)
+    console.log("[히스토리] 플랜 조회 시작, userId:", uid)
     const { data, error } = await getUserPlannerPlans(uid)
-    if (error) setPlansError("플랜 목록을 불러오는데 실패했습니다")
-    else setPlannerPlans(data || [])
+    console.log("[히스토리] 플랜 조회 결과 - data:", data, "error:", error)
+    if (error) {
+      console.error("[히스토리] 플랜 조회 에러:", error)
+      setPlansError(`플랜 목록을 불러오는데 실패했습니다: ${error}`)
+    } else {
+      setPlannerPlans(data || [])
+    }
     setLoadingPlans(false)
   }
 
