@@ -204,23 +204,23 @@ function HistoryCard({ plan }: { plan: StoredMenuPlan }) {
     hour: "2-digit",
     minute: "2-digit",
   })
-
-  // 첫 3개 메뉴 이름을 태그로 사용
   const tags = plan.output.menuOptions.slice(0, 3).map(m => m.title)
 
   return (
-    <div className="bg-dc-surface rounded-2xl border border-dc-border p-4 flex flex-col gap-3">
-      <div className="flex flex-col gap-1.5">
+    <div className="bg-dc-surface rounded-2xl border border-dc-border p-4 flex flex-col gap-3 min-h-[160px]">
+      <div className="flex flex-col gap-1.5 flex-1">
         <span className="text-[11px] font-semibold text-dc-primary bg-dc-primary-light px-2.5 py-1 rounded-full w-fit">
           {timeStr}
         </span>
-        <div className="text-dc-text text-[15px] font-bold leading-snug">{mainTitle}</div>
-        <div className="text-dc-text-secondary text-[12px] leading-relaxed">
+        <div className="text-dc-text text-[15px] font-bold leading-snug line-clamp-1">
+          {mainTitle}
+        </div>
+        <div className="text-dc-text-secondary text-[12px] leading-relaxed line-clamp-2">
           {tags.join(" · ")}
         </div>
       </div>
 
-      <div className="flex gap-2 mt-0.5">
+      <div className="flex gap-2 mt-auto">
         <Link
           href={`/result?resultId=${plan.resultId}`}
           className="flex-1 h-11 bg-dc-primary text-white text-[13px] font-semibold rounded-xl flex items-center justify-center hover:bg-[#2d6b45] transition-colors"

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Clock, Flame, ChevronRight, Refrigerator } from "lucide-react"
 import { NavBar, MobileBottomNav } from "@/components/shared/PageLayout"
 import { onAuthChange } from "@/lib/firebase"
@@ -32,8 +32,8 @@ const TIME_MAP: Record<string, 5 | 10 | 15> = {
   "10분": 10,
   "15분": 15,
 }
-const EXPIRY_URGENT_DAYS = 3  // amber 뱃지 기준
-const EXPIRY_WARN_DAYS = 7    // yellow 뱃지 기준
+const EXPIRY_URGENT_DAYS = 3
+const EXPIRY_WARN_DAYS = 7
 
 // ─── 유통기한 헬퍼 ───────────────────────────────────────────────
 function getDaysLeft(expiresOn: string): number {
@@ -69,17 +69,7 @@ function removeIngredient(source: string, name: string): string {
 }
 
 // ─── 서브 컴포넌트 ────────────────────────────────────────────────
-
-/** 시간/도구 선택 pill 버튼 */
-function OptionPill({
-  label,
-  active,
-  onClick,
-}: {
-  label: string
-  active: boolean
-  onClick: () => void
-}) {
+function OptionPill({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
@@ -95,16 +85,7 @@ function OptionPill({
   )
 }
 
-/** 냉장고 재료 버튼 — 유통기한 뱃지 + 토글 지원 */
-function FridgeChip({
-  item,
-  added,
-  onToggle,
-}: {
-  item: FridgeItem
-  added: boolean
-  onToggle: () => void
-}) {
+function FridgeChip({ item, added, onToggle }: { item: FridgeItem; added: boolean; onToggle: () => void }) {
   const days = item.expiresOn ? getDaysLeft(item.expiresOn) : null
   const hasExpiry = days !== null && days <= EXPIRY_WARN_DAYS
 
@@ -121,7 +102,6 @@ function FridgeChip({
         }
       `}
     >
-      {/* 유통기한 D-7 이내 뱃지 — 선택 여부 관계없이 항상 표시 */}
       {hasExpiry && (
         <span className={`text-[10px] font-bold px-1.5 py-[2px] rounded-full border ${getExpiryBadge(days!)}`}>
           {getExpiryLabel(days!)}
@@ -139,6 +119,8 @@ function FridgeChip({
 // ─── 메인 ─────────────────────────────────────────────────────────
 export default function QuickPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+
   const [selectedTime, setSelectedTime] = useState("10분")
   const [selectedTools, setSelectedTools] = useState<string[]>(["팬"])
   const [ingredients, setIngredients] = useState("")
@@ -148,6 +130,14 @@ export default function QuickPage() {
 
   const [authUserId, setAuthUserId] = useState<string | null>(null)
   const [fridgeItems, setFridgeItems] = useState<FridgeItem[]>([])
+
+  // ✨ 랜딩 페이지에서 메뉴 이름을 넘겨받으면 재료 입력창에 자동 입력
+  useEffect(() => {
+    const menuFromLanding = searchParams.get("menu")
+    if (menuFromLanding) {
+      setIngredients(menuFromLanding)
+    }
+  }, [searchParams])
 
   useEffect(() => {
     const unsub = onAuthChange((u) => setAuthUserId(u?.uid ?? null))
@@ -162,7 +152,6 @@ export default function QuickPage() {
       .catch(() => setFridgeItems([]))
   }, [authUserId])
 
-  // 유통기한 임박 재료를 앞으로 정렬
   const sortedFridge = [...fridgeItems].sort((a, b) => {
     const da = a.expiresOn ? getDaysLeft(a.expiresOn) : 999
     const db = b.expiresOn ? getDaysLeft(b.expiresOn) : 999
@@ -172,9 +161,6 @@ export default function QuickPage() {
   const urgentItems = sortedFridge.filter(
     (i) => i.expiresOn && getDaysLeft(i.expiresOn) <= EXPIRY_URGENT_DAYS
   )
-  const warnItems = sortedFridge.filter(
-    (i) => i.expiresOn && getDaysLeft(i.expiresOn) > EXPIRY_URGENT_DAYS && getDaysLeft(i.expiresOn) <= EXPIRY_WARN_DAYS
-  )
 
   const toggleTool = (t: string) =>
     setSelectedTools((p) => p.includes(t) ? p.filter((x) => x !== t) : [...p, t])
@@ -182,11 +168,7 @@ export default function QuickPage() {
   const toggleIngredient = (name: string) => {
     if (!name.trim()) return
     setIngredients((prev) => {
-      if (containsIngredient(prev, name)) {
-        // 이미 있으면 제거
-        return removeIngredient(prev, name)
-      }
-      // 없으면 추가
+      if (containsIngredient(prev, name)) return removeIngredient(prev, name)
       if (!prev.trim()) return name
       return `${prev}, ${name}`
     })
@@ -235,7 +217,6 @@ export default function QuickPage() {
 
   return (
     <div className="min-h-screen bg-dc-bg">
-      {/* 상단 네비 */}
       <div className="sticky top-0 z-50 w-full border-b border-dc-border bg-dc-surface">
         <NavBar variant="app" />
       </div>
@@ -245,12 +226,17 @@ export default function QuickPage() {
 
         <main className="w-full lg:w-[960px] lg:flex-none px-5 lg:px-10 py-6 lg:py-12 pb-[148px] lg:pb-16 flex flex-col gap-5 lg:gap-6">
 
-          {/* 페이지 헤더 */}
           <header className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
               <span className="inline-flex h-6 px-2.5 items-center rounded-full bg-dc-primary-light text-dc-primary text-[11px] font-bold tracking-wide">
                 AI 추천
               </span>
+              {/* ✨ 랜딩에서 넘어온 경우 메뉴 이름 표시 */}
+              {searchParams.get("menu") && (
+                <span className="inline-flex h-6 px-2.5 items-center rounded-full bg-dc-muted text-dc-text-secondary text-[11px] font-medium">
+                  {searchParams.get("menu")} 레시피
+                </span>
+              )}
             </div>
             <h1 className="text-dc-text text-[22px] lg:text-[28px] font-bold leading-snug mt-1">
               지금 만들 수 있는 한 끼
@@ -263,7 +249,7 @@ export default function QuickPage() {
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_268px] gap-5 lg:gap-6">
             <div className="flex flex-col gap-4">
 
-              {/* ── 요리 시간 ── */}
+              {/* 요리 시간 */}
               <section className="bg-dc-surface rounded-2xl border border-dc-border p-4 lg:p-5">
                 <div className="flex items-center gap-2 mb-3">
                   <Clock size={14} className="text-dc-text-secondary" />
@@ -271,17 +257,12 @@ export default function QuickPage() {
                 </div>
                 <div className="flex gap-2">
                   {TIME_OPTIONS.map((t) => (
-                    <OptionPill
-                      key={t}
-                      label={t}
-                      active={selectedTime === t}
-                      onClick={() => setSelectedTime(t)}
-                    />
+                    <OptionPill key={t} label={t} active={selectedTime === t} onClick={() => setSelectedTime(t)} />
                   ))}
                 </div>
               </section>
 
-              {/* ── 조리 도구 ── */}
+              {/* 조리 도구 */}
               <section className="bg-dc-surface rounded-2xl border border-dc-border p-4 lg:p-5">
                 <div className="flex items-center gap-2 mb-3">
                   <Flame size={14} className="text-dc-text-secondary" />
@@ -305,7 +286,7 @@ export default function QuickPage() {
                 </div>
               </section>
 
-              {/* ── 재료 입력 + 냉장고 ── */}
+              {/* 재료 입력 + 냉장고 */}
               <section className="bg-dc-surface rounded-2xl border border-dc-border p-4 lg:p-5 flex flex-col gap-4">
                 <div className="flex flex-col gap-2">
                   <span className="text-dc-text text-[13px] font-semibold">재료 입력</span>
@@ -318,7 +299,6 @@ export default function QuickPage() {
                   />
                 </div>
 
-                {/* 냉장고 재료 */}
                 {authUserId && fridgeItems.length === 0 && (
                   <div className="pt-1 border-t border-dc-border">
                     <div className="flex items-center gap-2 py-3 px-1">
@@ -332,29 +312,19 @@ export default function QuickPage() {
                     </div>
                   </div>
                 )}
+
                 {fridgeItems.length > 0 && (
                   <div className="flex flex-col gap-3 pt-1 border-t border-dc-border">
-
-                    {/* 유통기한 임박 경고 배너 */}
                     {urgentItems.length > 0 && (
                       <div className="flex flex-col gap-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5">
-                            {/* 점멸 도트 */}
-                            <span className="relative flex h-2 w-2">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400" />
-                            </span>
-                            <span className="text-[12px] font-semibold text-dc-text">
-                              먼저 쓸 재료
-                            </span>
-                            <span className="text-[11px] text-dc-text-muted">
-                              유통기한 3일 이내
-                            </span>
-                          </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400" />
+                          </span>
+                          <span className="text-[12px] font-semibold text-dc-text">먼저 쓸 재료</span>
+                          <span className="text-[11px] text-dc-text-muted">유통기한 3일 이내</span>
                         </div>
-
-                        {/* 임박 재료 칩들 */}
                         <div className="flex flex-wrap gap-2">
                           {urgentItems.map((item) => (
                             <FridgeChip
@@ -367,14 +337,10 @@ export default function QuickPage() {
                         </div>
                       </div>
                     )}
-
-                    {/* 일반 냉장고 재료 */}
                     <div className="flex flex-col gap-2">
                       <div className="flex items-center gap-1.5">
                         <Refrigerator size={13} className="text-dc-text-muted" />
-                        <span className="text-[12px] font-semibold text-dc-text-secondary">
-                          내 냉장고에서 선택
-                        </span>
+                        <span className="text-[12px] font-semibold text-dc-text-secondary">내 냉장고에서 선택</span>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {sortedFridge.map((item) => (
@@ -391,7 +357,7 @@ export default function QuickPage() {
                 )}
               </section>
 
-              {/* ── 기피 재료 ── */}
+              {/* 기피 재료 */}
               <section className="bg-dc-surface rounded-2xl border border-dc-border p-4 lg:p-5">
                 <span className="text-dc-text text-[13px] font-semibold block mb-2.5">기피 재료</span>
                 <input
@@ -402,9 +368,7 @@ export default function QuickPage() {
                 />
               </section>
 
-              {error && (
-                <p className="text-red-500 text-[13px] px-1">{error}</p>
-              )}
+              {error && <p className="text-red-500 text-[13px] px-1">{error}</p>}
 
               {/* 데스크탑 제출 버튼 */}
               <button
@@ -419,10 +383,7 @@ export default function QuickPage() {
                     AI 메뉴 생성 중...
                   </>
                 ) : (
-                  <>
-                    배달컷 메뉴 추천받기
-                    <ChevronRight size={18} />
-                  </>
+                  <>배달컷 메뉴 추천받기 <ChevronRight size={18} /></>
                 )}
               </button>
             </div>
@@ -445,7 +406,6 @@ export default function QuickPage() {
                   ))}
                 </div>
               </div>
-
               <div className="bg-dc-primary-light rounded-2xl p-5">
                 <p className="text-dc-primary text-[13px] font-bold mb-1">💡 잘 되는 입력법</p>
                 <p className="text-dc-primary/80 text-[12px] leading-relaxed">
