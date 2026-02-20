@@ -127,16 +127,7 @@ export const checkAndConsumeUsageQuota = async (
     const safePlanner = Number.isFinite(plannerCount) && plannerCount > 0 ? plannerCount : 0
     const safeTotal = Number.isFinite(totalCount) && totalCount > 0 ? totalCount : 0
 
-    if (safeTotal >= DAILY_LIMIT) {
-      return {
-        allowed: false,
-        dailyLimit: DAILY_LIMIT,
-        usedCount: safeTotal,
-        remainingCount: 0,
-        dateKey,
-      }
-    }
-
+    // ✅ 무제한 모드: 카운트만 기록하고 제한 없음
     const nextQuick = feature === "quick" ? safeQuick + 1 : safeQuick
     const nextPlanner = feature === "planner" ? safePlanner + 1 : safePlanner
     const nextTotal = safeTotal + 1
@@ -157,6 +148,7 @@ export const checkAndConsumeUsageQuota = async (
       transaction.set(usageRef, payload)
     }
 
+    // ✅ 항상 allowed: true 반환 (무제한 사용)
     return {
       allowed: true,
       dailyLimit: DAILY_LIMIT,

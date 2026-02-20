@@ -77,10 +77,8 @@ export async function POST(request: Request) {
     return jsonError(400, identityResult.errorCode ?? "INVALID_IDENTITY", identityResult.message ?? "Failed to resolve identity")
   }
 
-  const quota = await checkAndConsumeUsageQuota(identityResult.identity, "planner")
-  if (!quota.allowed) {
-    return jsonError(429, "DAILY_LIMIT_EXCEEDED", "오늘 생성 한도(10회)를 모두 사용했어요.", quota)
-  }
+  // ✅ 무제한 모드: quota 체크만 하고 차단하지 않음 (확인용)
+  await checkAndConsumeUsageQuota(identityResult.identity, "planner")
 
   try {
     const output = await generatePlan(input)
