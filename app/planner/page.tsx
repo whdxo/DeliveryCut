@@ -1,10 +1,12 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
+import { Refrigerator } from "lucide-react"
 import { NavBar, MobileBottomNav } from "@/components/shared/PageLayout"
 import { onAuthChange } from "@/lib/firebase/auth"
 import { addFridgeItem, updateFridgeItem, deleteFridgeItem, getFridgeItemsByUserId } from "@/lib/firebase/firestore"
-import type { PlannerInput, PlannerResponse, PlannerOutput, PlannerMeal, ApiError, ShoppingItem } from "@/lib/types/api"
+import { unitLabel } from "@/lib/fridge/constants"
+import type { PlannerInput, PlannerResponse, PlannerOutput, PlannerMeal, ApiError, ShoppingItem, FridgeItem } from "@/lib/types/api"
 
 const MEAL_ICONS = ["🌅", "☀️", "🌙"]
 const MEAL_TIMES = ["아침", "점심", "저녁"]
@@ -50,11 +52,51 @@ export default function PlannerPage() {
   const [authUserId, setAuthUserId] = useState<string | null>(null)
   const [fridgeItemIds, setFridgeItemIds] = useState<Record<string, string>>({})
   const [fridgeError, setFridgeError] = useState("")
+  const [fridgeItems, setFridgeItems] = useState<FridgeItem[]>([])
 
   useEffect(() => {
     const unsub = onAuthChange((u) => setAuthUserId(u?.uid ?? null))
     return () => unsub()
   }, [])
+
+  useEffect(() => {
+    if (!authUserId) {
+      setFridgeItems([])
+      return
+    }
+
+    getFridgeItemsByUserId(authUserId)
+      .then(({ data }) => setFridgeItems(data ?? []))
+      .catch(() => setFridgeItems([]))
+  }, [authUserId])
+
+  const containsIngredient = (text: string, name: string) => {
+    const target = name.trim().toLowerCase()
+    if (!target) return false
+    return text
+      .split(",")
+      .map((token) => token.trim().toLowerCase())
+      .filter(Boolean)
+      .includes(target)
+  }
+
+  const removeIngredient = (text: string, name: string) => {
+    const target = name.trim().toLowerCase()
+    return text
+      .split(",")
+      .map((token) => token.trim())
+      .filter((token) => token && token.toLowerCase() !== target)
+      .join(", ")
+  }
+
+  const toggleFridgeIngredient = (name: string) => {
+    if (!name.trim()) return
+    setFridgeIngredients((prev) => {
+      if (containsIngredient(prev, name)) return removeIngredient(prev, name)
+      if (!prev.trim()) return name
+      return `${prev}, ${name}`
+    })
+  }
 
   const handleGenerate = async () => {
     if (isGenerating) return
@@ -259,6 +301,40 @@ export default function PlannerPage() {
                   rows={2}
                   className="w-full px-4 py-3 bg-dc-muted rounded-xl text-dc-text text-sm placeholder:text-dc-text-muted focus:outline-none focus:ring-1 focus:ring-dc-primary border border-transparent focus:border-dc-primary transition-colors resize-none"
                 />
+
+                {authUserId && fridgeItems.length === 0 && (
+                  <div className="mt-3 px-3 py-2 rounded-lg bg-dc-muted text-dc-text-muted text-xs">
+                    냉장고가 비어있어요. /fridge 에서 재료를 추가해 주세요.
+                  </div>
+                )}
+
+                {fridgeItems.length > 0 && (
+                  <div className="mt-3 flex flex-col gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <Refrigerator size={13} className="text-dc-text-muted" />
+                      <span className="text-[12px] font-semibold text-dc-text-secondary">내 냉장고에서 선택</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {fridgeItems.map((item) => {
+                        const selected = containsIngredient(fridgeIngredients, item.name)
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => toggleFridgeIngredient(item.name)}
+                            className={selected
+                              ? "h-9 px-3 rounded-full border text-[12px] font-medium transition-colors bg-dc-primary text-white border-dc-primary"
+                              : "h-9 px-3 rounded-full border text-[12px] font-medium transition-colors bg-dc-muted text-dc-text-secondary border-dc-border hover:bg-dc-border"
+                            }
+                          >
+                            {item.name} {item.amount}
+                            {unitLabel(item.unit)}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <button
