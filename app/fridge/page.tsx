@@ -14,6 +14,30 @@ import type {
 } from "@/lib/types/api"
 import { CATEGORIES, INGREDIENT_SUGGESTIONS, UNITS } from "@/lib/types/fridge"
 
+const BASIC_PANTRY_ITEMS: Array<{ name: string; unit: QuantityUnit }> = [
+  { name: "간장", unit: "ml" },
+  { name: "식용유", unit: "ml" },
+  { name: "소금", unit: "g" },
+  { name: "후추", unit: "g" },
+  { name: "설탕", unit: "g" },
+  { name: "식초", unit: "ml" },
+  { name: "고추장", unit: "g" },
+  { name: "된장", unit: "g" },
+]
+
+const pickQuickDefaults = (name: string, category: FridgeCategory) => {
+  const fromBasic = BASIC_PANTRY_ITEMS.find((item) => item.name === name)
+  if (fromBasic) {
+    return { unit: fromBasic.unit, amount: "1" }
+  }
+
+  if (category === "seasoning") {
+    return { unit: "g" as QuantityUnit, amount: "1" }
+  }
+
+  return { unit: "count" as QuantityUnit, amount: "1" }
+}
+
 export default function FridgePage() {
   const router = useRouter()
 
@@ -268,10 +292,12 @@ export default function FridgePage() {
   }
 
   const handleQuickAdd = (name: string, category: FridgeCategory) => {
+    const quickDefaults = pickQuickDefaults(name, category)
+
     setFormName(name)
     setFormCategory(category)
-    setFormAmount("1")
-    setFormUnit("count")
+    setFormAmount(quickDefaults.amount)
+    setFormUnit(quickDefaults.unit)
     setFormExpiresOn("")
     setEditingItem(null)
     setShowAddModal(true)
@@ -329,6 +355,23 @@ export default function FridgePage() {
 
     return base.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
   }, [items, activeCategory, sortBy])
+
+
+  const quickSuggestionsByCategory = useMemo(() => {
+    const result = {} as Record<FridgeCategory, string[]>
+
+    CATEGORIES.forEach((cat) => {
+      const base = INGREDIENT_SUGGESTIONS[cat.id] ?? []
+      if (cat.id === "seasoning") {
+        const merged = [...BASIC_PANTRY_ITEMS.map((item) => item.name), ...base]
+        result[cat.id] = Array.from(new Set(merged))
+        return
+      }
+      result[cat.id] = base
+    })
+
+    return result
+  }, [])
 
   return (
     <div className="min-h-screen bg-dc-bg">
@@ -519,7 +562,7 @@ export default function FridgePage() {
 
           {activeCategory === "all" && (
             <section className="mt-6 bg-dc-surface rounded-2xl border border-dc-border p-5">
-              <h3 className="text-dc-text text-[15px] font-bold mb-3">빠른 추가</h3>
+              <h3 className="text-dc-text text-[15px] font-bold mb-3">카테고리별 빠른 추가</h3>
               <div className="space-y-3">
                 {CATEGORIES.map((cat) => (
                   <div key={cat.id}>
@@ -528,7 +571,7 @@ export default function FridgePage() {
                       {cat.label}
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {(INGREDIENT_SUGGESTIONS[cat.id] ?? []).slice(0, 5).map((name) => (
+                      {(quickSuggestionsByCategory[cat.id] ?? []).slice(0, 5).map((name) => (
                         <button
                           key={name}
                           onClick={() => handleQuickAdd(name, cat.id)}
@@ -711,3 +754,9 @@ export default function FridgePage() {
     </div>
   )
 }
+
+
+
+
+
+

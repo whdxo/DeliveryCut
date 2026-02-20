@@ -15,7 +15,7 @@ const KEYWORD_RULES: Array<{
     result: { category: "vegetable", defaultUnit: "count" },
   },
   {
-    keywords: ["간장", "고추장", "된장", "소금", "설탕", "식초", "후추"],
+    keywords: ["간장", "진간장", "국간장", "양조간장", "고추장", "된장", "소금", "설탕", "식초", "후추", "식용유", "참기름", "들기름", "올리브유", "카놀라유"],
     result: { category: "seasoning", defaultUnit: "ml" },
   },
 ]
@@ -38,3 +38,4 @@ export const inferFoodByKeyword = (
 
   return null
 }
+

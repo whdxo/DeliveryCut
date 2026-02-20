@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server"
 import { generateMenu } from "@/lib/ai/generateMenu"
 import { validateGenerateInput, validateGenerateOutput } from "@/lib/ai/schema"
-import { saveGeneratedPlan, getUserMenuPlans } from "@/lib/firebase"
-import type { ApiError, GenerateResponse, StoredMenuPlan } from "@/lib/types/api"
+import { finalizeShoppingList } from "@/lib/ai/postprocess"
+import { saveGeneratedPlan, getFridgeItemsByUserId, getUserMenuPlans } from "@/lib/firebase"
+import type { ApiError, GenerateInput, GenerateResponse, StoredMenuPlan } from "@/lib/types/api"
 
 const jsonError = (status: number, code: string, message: string, details?: unknown) => {
   const body: ApiError = { error: { code, message, details } }
@@ -43,6 +44,35 @@ const parseRequestUserId = (payload: unknown): { userId: string | null; error?: 
   return { userId: raw.trim() || null }
 }
 
+const withInventoryContext = async (input: GenerateInput, userId: string | null): Promise<GenerateInput> => {
+  if (Array.isArray(input.inventoryContext) && input.inventoryContext.length > 0) {
+    return input
+  }
+
+  if (!userId) return input
+
+  const fridgeResult = await getFridgeItemsByUserId(userId)
+  if (fridgeResult.error || !fridgeResult.data) {
+    return input
+  }
+
+  const inventoryContext = fridgeResult.data
+    .filter((item) => Number.isFinite(item.amount) && item.amount > 0)
+    .map((item) => ({
+      name: item.name,
+      amount: item.amount,
+      unit: item.unit,
+      category: item.category,
+    }))
+
+  if (inventoryContext.length === 0) return input
+
+  return {
+    ...input,
+    inventoryContext,
+  }
+}
+
 export async function POST(request: Request) {
   let payload: unknown
 
@@ -63,7 +93,6 @@ export async function POST(request: Request) {
   }
 
   try {
-    // [AI-3] userId가 있으면 최근 메뉴 조회해서 중복 추천 방지
     let recentMenus: string[] = []
     if (userIdParsing.userId) {
       const { data: plans } = await getUserMenuPlans(userIdParsing.userId)
@@ -72,8 +101,11 @@ export async function POST(request: Request) {
         .slice(0, 6)
     }
 
-    const output = await generateMenu({ ...inputValidation.data, recentMenus })
-    const outputValidation = validateGenerateOutput(output, inputValidation.data)
+    const inputWithInventory = await withInventoryContext(inputValidation.data, userIdParsing.userId)
+
+    const rawOutput = await generateMenu({ ...inputWithInventory, recentMenus })
+    const output = finalizeShoppingList(rawOutput, inputWithInventory)
+    const outputValidation = validateGenerateOutput(output, inputWithInventory)
 
     if (!outputValidation.valid || !outputValidation.data) {
       return jsonError(
@@ -90,7 +122,7 @@ export async function POST(request: Request) {
     const stored: StoredMenuPlan = stripUndefined({
       resultId,
       userId: userIdParsing.userId,
-      input: inputValidation.data,
+      input: inputWithInventory,
       output: outputValidation.data,
       meta: {
         source: "openai",
