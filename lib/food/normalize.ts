@@ -61,7 +61,7 @@ export const canonicalizeFoodName = (value: string): string => {
 
   for (const [alias, canonical] of Object.entries(NAME_ALIAS)) {
     const aliasKey = normalizeFoodKey(alias)
-    if (key === aliasKey || key.includes(aliasKey) || aliasKey.includes(key)) {
+    if (key === aliasKey || key.includes(aliasKey)) {
       return canonical
     }
   }
@@ -89,5 +89,5 @@ export const foodNameIncludes = (target: string, query: string): boolean => {
   const tk = normalizeFoodKey(canonicalizeFoodName(target))
   const qk = normalizeFoodKey(canonicalizeFoodName(query))
   if (!tk || !qk) return false
-  return tk.includes(qk) || qk.includes(tk)
+  return tk === qk
 }
