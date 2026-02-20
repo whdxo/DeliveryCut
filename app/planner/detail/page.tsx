@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { NavBar, MobileBottomNav } from "@/components/shared/PageLayout"
 
@@ -36,7 +36,7 @@ interface PlanData {
   estimatedCost: number
 }
 
-export default function PlanDetailPage() {
+function PlanDetailContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const planId = searchParams.get("planId")
@@ -95,6 +95,12 @@ export default function PlanDetailPage() {
 
   const checkedCount = Object.values(checkedShopping).filter(Boolean).length
 
+  // ✅ 장보기 목록 아이템을 합쳐서 쿠팡 검색 쿼리 생성
+  const coupangSearchQuery = planData?.shoppingList
+    .slice(0, 3)
+    .map((item) => item.name)
+    .join("+") ?? "장보기"
+
   if (loading) {
     return (
       <div className="min-h-screen bg-dc-bg flex items-center justify-center">
@@ -121,152 +127,189 @@ export default function PlanDetailPage() {
   }
 
   return (
+    <div className="flex w-full min-h-[calc(100vh-4rem)]">
+      <div className="flex-1 bg-dc-side border-r border-dc-border hidden lg:block" />
+
+      <main className="w-full lg:w-[960px] lg:flex-none px-5 lg:px-10 py-8 lg:py-12 pb-24 lg:pb-12">
+        {/* 헤더 */}
+        <header className="mb-6">
+          {/* ✅ router.back()으로 변경 — 어디서 왔든 이전 페이지로 돌아감 */}
+          <button
+            onClick={() => router.back()}
+            className="text-dc-text-secondary text-sm font-medium hover:text-dc-text transition-colors mb-3 flex items-center gap-1"
+          >
+            ← 뒤로가기
+          </button>
+          <p className="inline-flex px-3 py-1 rounded-full bg-dc-primary-light text-dc-primary text-xs font-semibold">
+            저장된 플랜
+          </p>
+          <h1 className="mt-3 text-dc-text text-2xl lg:text-[28px] font-bold">
+            {planData.days}일 식단 플랜
+          </h1>
+          <p className="mt-1 text-dc-text-secondary text-sm">
+            하루 {planData.mealsPerDay}끼 · 예산 {planData.budget.toLocaleString()}원
+          </p>
+        </header>
+
+        <div ref={resultRef}>
+          <div className="flex items-center gap-3 mb-6">
+            <div className="flex-1 h-px bg-dc-border" />
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-dc-primary-light rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-dc-primary" />
+              <span className="text-dc-primary text-[12px] font-bold">
+                {new Date(planData.createdAt).toLocaleDateString("ko-KR")}
+              </span>
+            </div>
+            <div className="flex-1 h-px bg-dc-border" />
+          </div>
+
+          {/* Day 카드 그리드 */}
+          <div
+            className={`grid gap-4 mb-6 ${
+              planData.days === 3 ? "grid-cols-1 lg:grid-cols-3" : "grid-cols-1 lg:grid-cols-4"
+            }`}
+          >
+            {planData.plan.map((row) => {
+              const color = DAY_COLORS[(row.day - 1) % DAY_COLORS.length]
+              return (
+                <div
+                  key={row.day}
+                  className="bg-dc-surface border border-dc-border rounded-2xl overflow-hidden"
+                >
+                  <div
+                    className={`${color.header} px-4 py-3 flex items-center justify-between`}
+                  >
+                    <span className={`${color.label} text-sm font-bold`}>Day {row.day}</span>
+                    <span className="text-dc-text-secondary text-[11px]">
+                      {planData.mealsPerDay}끼
+                    </span>
+                  </div>
+
+                  <div className="divide-y divide-dc-border">
+                    {row.meals.map((meal, mealIdx) => {
+                      const key = `${row.day}-${mealIdx}`
+                      const isDone = checkedMeals[key]
+                      return (
+                        <div key={mealIdx} className="px-4 py-3 flex items-center gap-3">
+                          <span className="text-lg flex-shrink-0">{MEAL_ICONS[mealIdx]}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-[10px] font-bold text-dc-text-muted mb-0.5">
+                              {MEAL_TIMES[mealIdx]}
+                            </div>
+                            <a
+                              href={`https://www.youtube.com/results?search_query=${encodeURIComponent(meal + " 레시피")}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className={`text-[13px] font-bold leading-tight hover:text-dc-primary transition-colors truncate block ${
+                                isDone ? "line-through text-dc-text-muted" : "text-dc-text"
+                              }`}
+                            >
+                              {meal} 🔍
+                            </a>
+                          </div>
+                          <button
+                            onClick={() => toggleMeal(key)}
+                            className={`w-6 h-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-[10px] font-bold transition-colors ${
+                              isDone
+                                ? "bg-dc-primary border-dc-primary text-white"
+                                : "border-dc-border bg-white text-transparent"
+                            }`}
+                          >
+                            ✓
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* 장보기 리스트 */}
+          <div className="bg-dc-surface border border-dc-border rounded-2xl p-5 lg:p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-dc-text text-base font-bold">🛒 통합 장보기 리스트</h2>
+              <span className="text-[11px] font-semibold text-dc-primary bg-dc-primary-light px-2.5 py-1 rounded-full">
+                {checkedCount}/{planData.shoppingList.length}개 완료
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+              {planData.shoppingList.map((item) => {
+                const isDone = checkedShopping[item.name]
+                return (
+                  <button
+                    key={item.name}
+                    onClick={() => toggleShopping(item.name)}
+                    className={`flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${
+                      isDone
+                        ? "bg-dc-muted border-dc-border opacity-50"
+                        : "bg-dc-muted border-dc-border hover:border-dc-primary"
+                    }`}
+                  >
+                    <div
+                      className={`w-5 h-5 rounded-md border-2 flex-shrink-0 flex items-center justify-center text-[9px] font-bold transition-colors ${
+                        isDone
+                          ? "bg-dc-primary border-dc-primary text-white"
+                          : "border-dc-border bg-white"
+                      }`}
+                    >
+                      {isDone && "✓"}
+                    </div>
+                    <div className="min-w-0">
+                      <p
+                        className={`text-sm font-bold ${
+                          isDone ? "line-through text-dc-text-muted" : "text-dc-text"
+                        }`}
+                      >
+                        {item.name} {item.quantity}
+                        {item.unit}
+                      </p>
+                      <p className="text-dc-text-muted text-[11px] truncate">
+                        {item.substituteKeywords.join(", ")}
+                      </p>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* ✅ 쿠팡 링크: 장보기 목록 상위 3개 아이템으로 동적 검색 */}
+            <a
+              href={`https://www.coupang.com/np/search?q=${coupangSearchQuery}`}
+              target="_blank"
+              rel="noreferrer"
+              className="h-11 rounded-xl bg-dc-primary text-white text-sm font-semibold flex items-center justify-center hover:bg-[#2d6b45] transition-colors"
+            >
+              쿠팡 검색으로 구매하기
+            </a>
+          </div>
+        </div>
+      </main>
+
+      <div className="flex-1 bg-dc-side border-l border-dc-border hidden lg:block" />
+    </div>
+  )
+}
+
+export default function PlanDetailPage() {
+  return (
     <div className="min-h-screen bg-dc-bg">
       <div className="sticky top-0 z-50 w-full border-b border-dc-border bg-dc-surface">
         <NavBar variant="app" />
       </div>
 
-      <div className="flex w-full min-h-[calc(100vh-4rem)]">
-        <div className="flex-1 bg-dc-side border-r border-dc-border hidden lg:block" />
-
-        <main className="w-full lg:w-[960px] lg:flex-none px-5 lg:px-10 py-8 lg:py-12 pb-24 lg:pb-12">
-          {/* 헤더 */}
-          <header className="mb-6">
-            <button
-              onClick={() => router.push("/history?tab=식단플랜")}
-              className="text-dc-text-secondary text-sm font-medium hover:text-dc-text transition-colors mb-3 flex items-center gap-1"
-            >
-              ← 뒤로가기
-            </button>
-            <p className="inline-flex px-3 py-1 rounded-full bg-dc-primary-light text-dc-primary text-xs font-semibold">
-              저장된 플랜
-            </p>
-            <h1 className="mt-3 text-dc-text text-2xl lg:text-[28px] font-bold">
-              {planData.days}일 식단 플랜
-            </h1>
-            <p className="mt-1 text-dc-text-secondary text-sm">
-              하루 {planData.mealsPerDay}끼 · 예산 {planData.budget.toLocaleString()}원
-            </p>
-          </header>
-
-          <div ref={resultRef}>
-            <div className="flex items-center gap-3 mb-6">
-              <div className="flex-1 h-px bg-dc-border" />
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-dc-primary-light rounded-full">
-                <span className="w-1.5 h-1.5 rounded-full bg-dc-primary" />
-                <span className="text-dc-primary text-[12px] font-bold">
-                  {new Date(planData.createdAt).toLocaleDateString("ko-KR")}
-                </span>
-              </div>
-              <div className="flex-1 h-px bg-dc-border" />
-            </div>
-
-            {/* Day 카드 그리드 */}
-            <div className={`grid gap-4 mb-6 ${planData.days === 3 ? "grid-cols-1 lg:grid-cols-3" : "grid-cols-1 lg:grid-cols-4"}`}>
-              {planData.plan.map((row) => {
-                const color = DAY_COLORS[(row.day - 1) % DAY_COLORS.length]
-                return (
-                  <div key={row.day} className="bg-dc-surface border border-dc-border rounded-2xl overflow-hidden">
-                    <div className={`${color.header} px-4 py-3 flex items-center justify-between`}>
-                      <span className={`${color.label} text-sm font-bold`}>Day {row.day}</span>
-                      <span className="text-dc-text-secondary text-[11px]">{planData.mealsPerDay}끼</span>
-                    </div>
-
-                    <div className="divide-y divide-dc-border">
-                      {row.meals.map((meal, mealIdx) => {
-                        const key = `${row.day}-${mealIdx}`
-                        const isDone = checkedMeals[key]
-                        return (
-                          <div key={mealIdx} className="px-4 py-3 flex items-center gap-3">
-                            <span className="text-lg flex-shrink-0">{MEAL_ICONS[mealIdx]}</span>
-                            <div className="flex-1 min-w-0">
-                              <div className="text-[10px] font-bold text-dc-text-muted mb-0.5">
-                                {MEAL_TIMES[mealIdx]}
-                              </div>
-                              <a
-                                href={`https://www.youtube.com/results?search_query=${encodeURIComponent(meal + " 레시피")}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className={`text-[13px] font-bold leading-tight hover:text-dc-primary transition-colors truncate block ${
-                                  isDone ? "line-through text-dc-text-muted" : "text-dc-text"
-                                }`}
-                              >
-                                {meal} 🔍
-                              </a>
-                            </div>
-                            <button
-                              onClick={() => toggleMeal(key)}
-                              className={`w-6 h-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-[10px] font-bold transition-colors ${
-                                isDone
-                                  ? "bg-dc-primary border-dc-primary text-white"
-                                  : "border-dc-border bg-white text-transparent"
-                              }`}
-                            >
-                              ✓
-                            </button>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* 장보기 리스트 */}
-            <div className="bg-dc-surface border border-dc-border rounded-2xl p-5 lg:p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-dc-text text-base font-bold">🛒 통합 장보기 리스트</h2>
-                <span className="text-[11px] font-semibold text-dc-primary bg-dc-primary-light px-2.5 py-1 rounded-full">
-                  {checkedCount}/{planData.shoppingList.length}개 완료
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
-                {planData.shoppingList.map((item) => {
-                  const isDone = checkedShopping[item.name]
-                  return (
-                    <button
-                      key={item.name}
-                      onClick={() => toggleShopping(item.name)}
-                      className={`flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${
-                        isDone
-                          ? "bg-dc-muted border-dc-border opacity-50"
-                          : "bg-dc-muted border-dc-border hover:border-dc-primary"
-                      }`}
-                    >
-                      <div className={`w-5 h-5 rounded-md border-2 flex-shrink-0 flex items-center justify-center text-[9px] font-bold transition-colors ${
-                        isDone ? "bg-dc-primary border-dc-primary text-white" : "border-dc-border bg-white"
-                      }`}>
-                        {isDone && "✓"}
-                      </div>
-                      <div className="min-w-0">
-                        <p className={`text-sm font-bold ${isDone ? "line-through text-dc-text-muted" : "text-dc-text"}`}>
-                          {item.name} {item.quantity}{item.unit}
-                        </p>
-                        <p className="text-dc-text-muted text-[11px] truncate">
-                          {item.substituteKeywords.join(", ")}
-                        </p>
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
-
-              <a
-                href="https://www.coupang.com/np/search?q=장보기"
-                target="_blank"
-                rel="noreferrer"
-                className="h-11 rounded-xl bg-dc-primary text-white text-sm font-semibold flex items-center justify-center hover:bg-[#2d6b45] transition-colors"
-              >
-                쿠팡 검색으로 구매하기
-              </a>
-            </div>
+      {/* ✅ useSearchParams 사용 컴포넌트를 Suspense로 감쌈 */}
+      <Suspense
+        fallback={
+          <div className="flex items-center justify-center py-20 text-dc-text-secondary">
+            플랜을 불러오는 중...
           </div>
-        </main>
-
-        <div className="flex-1 bg-dc-side border-l border-dc-border hidden lg:block" />
-      </div>
+        }
+      >
+        <PlanDetailContent />
+      </Suspense>
 
       <MobileBottomNav />
     </div>
