@@ -14,6 +14,30 @@ import type {
 } from "@/lib/types/api"
 import { CATEGORIES, INGREDIENT_SUGGESTIONS, UNITS } from "@/lib/types/fridge"
 
+const BASIC_PANTRY_ITEMS: Array<{ name: string; unit: QuantityUnit }> = [
+  { name: "간장", unit: "ml" },
+  { name: "식용유", unit: "ml" },
+  { name: "소금", unit: "g" },
+  { name: "후추", unit: "g" },
+  { name: "설탕", unit: "g" },
+  { name: "식초", unit: "ml" },
+  { name: "고추장", unit: "g" },
+  { name: "된장", unit: "g" },
+]
+
+const pickQuickDefaults = (name: string, category: FridgeCategory) => {
+  const fromBasic = BASIC_PANTRY_ITEMS.find((item) => item.name === name)
+  if (fromBasic) {
+    return { unit: fromBasic.unit, amount: "1" }
+  }
+
+  if (category === "seasoning") {
+    return { unit: "g" as QuantityUnit, amount: "1" }
+  }
+
+  return { unit: "count" as QuantityUnit, amount: "1" }
+}
+
 export default function FridgePage() {
   const router = useRouter()
 
@@ -268,10 +292,12 @@ export default function FridgePage() {
   }
 
   const handleQuickAdd = (name: string, category: FridgeCategory) => {
+    const quickDefaults = pickQuickDefaults(name, category)
+
     setFormName(name)
     setFormCategory(category)
-    setFormAmount("1")
-    setFormUnit("count")
+    setFormAmount(quickDefaults.amount)
+    setFormUnit(quickDefaults.unit)
     setFormExpiresOn("")
     setEditingItem(null)
     setShowAddModal(true)
@@ -519,7 +545,20 @@ export default function FridgePage() {
 
           {activeCategory === "all" && (
             <section className="mt-6 bg-dc-surface rounded-2xl border border-dc-border p-5">
-              <h3 className="text-dc-text text-[15px] font-bold mb-3">빠른 추가</h3>
+              <h3 className="text-dc-text text-[15px] font-bold mb-3">기본 조미료 빠른 등록</h3>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {BASIC_PANTRY_ITEMS.map((item) => (
+                  <button
+                    key={item.name}
+                    onClick={() => handleQuickAdd(item.name, "seasoning")}
+                    className="h-9 px-3 bg-dc-muted text-dc-text-secondary text-[12px] font-medium rounded-full hover:bg-dc-primary hover:text-white transition-colors"
+                  >
+                    + {item.name}
+                  </button>
+                ))}
+              </div>
+
+              <h3 className="text-dc-text text-[15px] font-bold mb-3">카테고리별 빠른 추가</h3>
               <div className="space-y-3">
                 {CATEGORIES.map((cat) => (
                   <div key={cat.id}>
@@ -711,3 +750,9 @@ export default function FridgePage() {
     </div>
   )
 }
+
+
+
+
+
+

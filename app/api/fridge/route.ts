@@ -8,6 +8,7 @@ import { FRIDGE_CATEGORIES, QUANTITY_UNITS } from "@/lib/fridge/constants"
 import { isQuantityUnit } from "@/lib/fridge/unit"
 import { inferFallbackFood } from "@/lib/food/fallback"
 import { inferFoodByKeyword } from "@/lib/food/keyword-rules"
+import { canonicalizeFoodName } from "@/lib/food/normalize"
 import type {
   ApiError,
   FridgeCategory,
@@ -142,7 +143,8 @@ export async function POST(request: Request) {
   }
 
   const body = payload as Partial<FridgeCreateInput>
-  const name = typeof body.name === "string" ? body.name.trim() : ""
+  const inputName = typeof body.name === "string" ? body.name.trim() : ""
+  const name = canonicalizeFoodName(inputName)
   const amount = Number(body.amount)
   const unit = typeof body.unit === "string" ? body.unit : ""
   const rawCategory = typeof body.category === "string" ? body.category : undefined
@@ -190,4 +192,5 @@ export async function POST(request: Request) {
 
   return NextResponse.json(item)
 }
+
 

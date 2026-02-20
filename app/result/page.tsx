@@ -26,6 +26,7 @@ const toolLabel: Record<Tool, string> = {
   microwave: "전자레인지",
   pan: "팬",
   airfryer: "에어프라이어",
+  pot: "냄비",
 }
 
 function SkeletonCard() {
@@ -205,7 +206,12 @@ function ResultContent() {
   }, [result, selectedMenu])
 
   const recipe = selectedData
-    ? { name: selectedData.title, ingredients: selectedData.ingredients, steps: selectedData.steps }
+    ? {
+        name: selectedData.title,
+        ingredients: selectedData.ingredients,
+        steps: selectedData.steps,
+        flavorDesign: selectedData.flavorDesign,
+      }
     : null
 
   const mealPlan = result
@@ -489,3 +495,8 @@ export default function ResultPage() {
     </Suspense>
   )
 }
+
+
+
+
+

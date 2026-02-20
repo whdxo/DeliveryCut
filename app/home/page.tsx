@@ -15,7 +15,7 @@ import type { ApiError, GenerateInput, GenerateResponse, ResultResponse, Tool } 
  * ─────────────────────────────────────────────────────────────────────────────
  */
 const TIME_OPTIONS = ["5분", "10분", "15분"]
-const TOOL_OPTIONS = ["전자레인지", "팬", "에어프라이어"]
+const TOOL_OPTIONS = ["전자레인지", "팬", "에어프라이어", "냄비"]
 const INGREDIENT_TAGS = ["계란", "두부", "김치", "양파", "참치", "스팸", "대파"]
 
 const FEATURE_CARDS = [
@@ -50,7 +50,9 @@ const cacheKey = (resultId: string) => `deliverycut:result:${resultId}`
 const toTool = (tool: string): Tool => {
   if (tool === "전자레인지") return "microwave"
   if (tool === "팬") return "pan"
-  return "airfryer"
+  if (tool === "에어프라이어") return "airfryer"
+  if (tool === "냄비") return "pot"
+  throw new Error(`Unknown tool: ${tool}`)
 }
 
 export default function HomePage() {
@@ -183,3 +185,6 @@ export default function HomePage() {
     </div>
   )
 }
+
+
+
