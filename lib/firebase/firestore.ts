@@ -560,17 +560,22 @@ export const getUserMenuPlans = async (userId: string) => {
 
 export const getUserPlannerPlans = async (userId: string) => {
   try {
+    console.log("[Firestore] getUserPlannerPlans 호출, userId:", userId)
+    console.log("[Firestore] collection:", collections.plannerPlans)
     const q = query(
       collection(db, collections.plannerPlans),
       where("userId", "==", userId)
     )
     const querySnapshot = await getDocs(q)
+    console.log("[Firestore] 문서 수:", querySnapshot.docs.length)
     const plannerPlans = querySnapshot.docs
       .map((docItem) => docItem.data() as StoredPlannerPlan)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 10)
+    console.log("[Firestore] 최종 플랜 수:", plannerPlans.length)
     return { data: plannerPlans, error: null }
   } catch (error: unknown) {
+    console.error("[Firestore] getUserPlannerPlans 에러:", error)
     return { data: null, error: error instanceof Error ? error.message : String(error) }
   }
 }

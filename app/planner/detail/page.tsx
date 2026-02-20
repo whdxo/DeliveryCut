@@ -3,6 +3,8 @@
 import { useEffect, useState, useRef, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { NavBar, MobileBottomNav } from "@/components/shared/PageLayout"
+import { getPlannerPlan } from "@/lib/firebase/firestore"
+import type { StoredPlannerPlan, ShoppingItem } from "@/lib/types/api"
 
 const MEAL_ICONS = ["🌅", "☀️", "🌙"]
 const MEAL_TIMES = ["아침", "점심", "저녁"]
@@ -17,25 +19,6 @@ const DAY_COLORS = [
   { header: "bg-[#fef3e2]", label: "text-[#b45309]" },
 ]
 
-interface PlanData {
-  id: string
-  createdAt: string
-  days: 3 | 7
-  mealsPerDay: 1 | 2 | 3
-  budget: number
-  plan: Array<{
-    day: number
-    meals: string[]
-  }>
-  shoppingList: Array<{
-    name: string
-    quantity: number
-    unit: string
-    substituteKeywords: string[]
-  }>
-  estimatedCost: number
-}
-
 function PlanDetailContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -43,7 +26,7 @@ function PlanDetailContent() {
   const resultRef = useRef<HTMLDivElement>(null)
 
   const [loading, setLoading] = useState(true)
-  const [planData, setPlanData] = useState<PlanData | null>(null)
+  const [planData, setPlanData] = useState<StoredPlannerPlan | null>(null)
   const [checkedMeals, setCheckedMeals] = useState<Record<string, boolean>>({})
   const [checkedShopping, setCheckedShopping] = useState<Record<string, boolean>>({})
 
@@ -53,38 +36,16 @@ function PlanDetailContent() {
       return
     }
 
-    // TODO: Firestore에서 플랜 불러오기
-    // const fetchPlan = async () => {
-    //   const { data } = await getPlannerPlan(planId)
-    //   if (data) setPlanData(data)
-    //   setLoading(false)
-    // }
-    // fetchPlan()
-
-    // 임시: Mock 데이터
-    setTimeout(() => {
-      setPlanData({
-        id: planId,
-        createdAt: new Date().toISOString(),
-        days: 3,
-        mealsPerDay: 2,
-        budget: 30000,
-        plan: [
-          { day: 1, meals: ["참치 김치 덮밥", "계란국"] },
-          { day: 2, meals: ["감자볶음밥", "참치마요덮밥"] },
-          { day: 3, meals: ["오믈렛", "된장국"] },
-        ],
-        shoppingList: [
-          { name: "계란", quantity: 10, unit: "개", substituteKeywords: ["유정란", "계란 10구"] },
-          { name: "두부", quantity: 3, unit: "모", substituteKeywords: ["부침용 두부", "찌개용 두부"] },
-          { name: "김치", quantity: 1, unit: "팩", substituteKeywords: ["배추김치", "볶음김치"] },
-          { name: "참치캔", quantity: 4, unit: "개", substituteKeywords: ["라이트참치", "참치 통조림"] },
-          { name: "감자", quantity: 4, unit: "개", substituteKeywords: ["감자 중", "감자 대"] },
-        ],
-        estimatedCost: 28000,
-      })
+    const fetchPlan = async () => {
+      const { data, error } = await getPlannerPlan(planId)
+      if (error || !data) {
+        console.error("[플랜 상세] 플랜 조회 실패:", error)
+      } else {
+        setPlanData(data)
+      }
       setLoading(false)
-    }, 300)
+    }
+    fetchPlan()
   }, [planId, router])
 
   const toggleMeal = (key: string) =>
@@ -96,9 +57,9 @@ function PlanDetailContent() {
   const checkedCount = Object.values(checkedShopping).filter(Boolean).length
 
   // ✅ 장보기 목록 아이템을 합쳐서 쿠팡 검색 쿼리 생성
-  const coupangSearchQuery = planData?.shoppingList
+  const coupangSearchQuery = planData?.output.shoppingList
     .slice(0, 3)
-    .map((item) => item.name)
+    .map((item) => item.item)
     .join("+") ?? "장보기"
 
   if (loading) {
@@ -144,10 +105,11 @@ function PlanDetailContent() {
             저장된 플랜
           </p>
           <h1 className="mt-3 text-dc-text text-2xl lg:text-[28px] font-bold">
-            {planData.days}일 식단 플랜
+            {planData.input.days}일 식단 플랜
           </h1>
           <p className="mt-1 text-dc-text-secondary text-sm">
-            하루 {planData.mealsPerDay}끼 · 예산 {planData.budget.toLocaleString()}원
+            하루 {planData.input.mealsPerDay}끼
+            {planData.input.budget && ` · 예산 ${planData.input.budget.toLocaleString()}원`}
           </p>
         </header>
 
@@ -166,28 +128,28 @@ function PlanDetailContent() {
           {/* Day 카드 그리드 */}
           <div
             className={`grid gap-4 mb-6 ${
-              planData.days === 3 ? "grid-cols-1 lg:grid-cols-3" : "grid-cols-1 lg:grid-cols-4"
+              planData.input.days === 3 ? "grid-cols-1 lg:grid-cols-3" : "grid-cols-1 lg:grid-cols-4"
             }`}
           >
-            {planData.plan.map((row) => {
-              const color = DAY_COLORS[(row.day - 1) % DAY_COLORS.length]
+            {planData.output.dayPlans.map((dayPlan) => {
+              const color = DAY_COLORS[(dayPlan.day - 1) % DAY_COLORS.length]
               return (
                 <div
-                  key={row.day}
+                  key={dayPlan.day}
                   className="bg-dc-surface border border-dc-border rounded-2xl overflow-hidden"
                 >
                   <div
                     className={`${color.header} px-4 py-3 flex items-center justify-between`}
                   >
-                    <span className={`${color.label} text-sm font-bold`}>Day {row.day}</span>
+                    <span className={`${color.label} text-sm font-bold`}>Day {dayPlan.day}</span>
                     <span className="text-dc-text-secondary text-[11px]">
-                      {planData.mealsPerDay}끼
+                      {planData.input.mealsPerDay}끼
                     </span>
                   </div>
 
                   <div className="divide-y divide-dc-border">
-                    {row.meals.map((meal, mealIdx) => {
-                      const key = `${row.day}-${mealIdx}`
+                    {dayPlan.meals.map((meal, mealIdx) => {
+                      const key = `${dayPlan.day}-${mealIdx}`
                       const isDone = checkedMeals[key]
                       return (
                         <div key={mealIdx} className="px-4 py-3 flex items-center gap-3">
@@ -197,14 +159,14 @@ function PlanDetailContent() {
                               {MEAL_TIMES[mealIdx]}
                             </div>
                             <a
-                              href={`https://www.youtube.com/results?search_query=${encodeURIComponent(meal + " 레시피")}`}
+                              href={`https://www.youtube.com/results?search_query=${encodeURIComponent(meal.name + " 레시피")}`}
                               target="_blank"
                               rel="noreferrer"
                               className={`text-[13px] font-bold leading-tight hover:text-dc-primary transition-colors truncate block ${
                                 isDone ? "line-through text-dc-text-muted" : "text-dc-text"
                               }`}
                             >
-                              {meal} 🔍
+                              {meal.name} 🔍
                             </a>
                           </div>
                           <button
@@ -231,17 +193,17 @@ function PlanDetailContent() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-dc-text text-base font-bold">🛒 통합 장보기 리스트</h2>
               <span className="text-[11px] font-semibold text-dc-primary bg-dc-primary-light px-2.5 py-1 rounded-full">
-                {checkedCount}/{planData.shoppingList.length}개 완료
+                {checkedCount}/{planData.output.shoppingList.length}개 완료
               </span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
-              {planData.shoppingList.map((item) => {
-                const isDone = checkedShopping[item.name]
+              {planData.output.shoppingList.map((item) => {
+                const isDone = checkedShopping[item.item]
                 return (
                   <button
-                    key={item.name}
-                    onClick={() => toggleShopping(item.name)}
+                    key={item.item}
+                    onClick={() => toggleShopping(item.item)}
                     className={`flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${
                       isDone
                         ? "bg-dc-muted border-dc-border opacity-50"
@@ -263,12 +225,14 @@ function PlanDetailContent() {
                           isDone ? "line-through text-dc-text-muted" : "text-dc-text"
                         }`}
                       >
-                        {item.name} {item.quantity}
+                        {item.item} {item.quantity}
                         {item.unit}
                       </p>
-                      <p className="text-dc-text-muted text-[11px] truncate">
-                        {item.substituteKeywords.join(", ")}
-                      </p>
+                      {item.reason && (
+                        <p className="text-dc-text-muted text-[11px] truncate">
+                          {item.reason}
+                        </p>
+                      )}
                     </div>
                   </button>
                 )
