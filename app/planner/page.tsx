@@ -49,6 +49,7 @@ export default function PlannerPage() {
   const [checkedShopping, setCheckedShopping] = useState<Record<string, boolean>>({})
   const [authUserId, setAuthUserId] = useState<string | null>(null)
   const [fridgeItemIds, setFridgeItemIds] = useState<Record<string, string>>({})
+  const [fridgeError, setFridgeError] = useState("")
 
   useEffect(() => {
     const unsub = onAuthChange((u) => setAuthUserId(u?.uid ?? null))
@@ -107,14 +108,18 @@ export default function PlannerPage() {
 
   const toggleShopping = async (item: ShoppingItem) => {
     const itemName = item.item
-    const willCheck = !checkedShopping[itemName]
+    const previousCheckedState = checkedShopping[itemName] || false
+    const willCheck = !previousCheckedState
+
+    // Optimistic UI update
     setCheckedShopping((prev) => ({ ...prev, [itemName]: willCheck }))
+    setFridgeError("")
 
     if (!authUserId) return
 
-    if (willCheck) {
-      // ✅ 체크: 냉장고에 추가 (중복이면 수량 합산)
-      try {
+    try {
+      if (willCheck) {
+        // ✅ 체크: 냉장고에 추가 (중복이면 수량 합산)
         const { data } = await getFridgeItemsByUserId(authUserId)
         const existing = data?.find((f) => f.name === itemName)
 
@@ -136,12 +141,8 @@ export default function PlannerPage() {
             setFridgeItemIds((prev) => ({ ...prev, [itemName]: newItem.id }))
           }
         }
-      } catch {
-        // 실패해도 체크는 유지
-      }
-    } else {
-      // ❌ 체크 취소: 냉장고에서 삭제 (수량 합산했던 경우 다시 빼기)
-      try {
+      } else {
+        // ❌ 체크 취소: 냉장고에서 삭제 (수량 합산했던 경우 다시 빼기)
         const { data } = await getFridgeItemsByUserId(authUserId)
         const existing = data?.find((f) => f.name === itemName)
 
@@ -160,9 +161,14 @@ export default function PlannerPage() {
           delete next[itemName]
           return next
         })
-      } catch {
-        // 실패해도 체크 취소는 유지
       }
+    } catch (error) {
+      // Revert UI state on error
+      setCheckedShopping((prev) => ({ ...prev, [itemName]: previousCheckedState }))
+      setFridgeError(`"${itemName}" 냉장고 ${willCheck ? "추가" : "삭제"} 중 오류가 발생했어요. 다시 시도해주세요.`)
+
+      // Auto-clear error after 5 seconds
+      setTimeout(() => setFridgeError(""), 5000)
     }
   }
 
@@ -280,6 +286,13 @@ export default function PlannerPage() {
           {error && (
             <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-xl">
               <p className="text-red-600 text-sm font-medium">{error}</p>
+            </div>
+          )}
+
+          {/* 냉장고 추가/삭제 오류 메시지 */}
+          {fridgeError && (
+            <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
+              <p className="text-yellow-800 text-sm font-medium">{fridgeError}</p>
             </div>
           )}
 
