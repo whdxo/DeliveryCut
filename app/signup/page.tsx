@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { signUp, signInWithGoogle, onAuthChange } from "@/lib/firebase/auth"
+import { AuthHeader } from "@/components/shared/PageLayout"
 
 const errorMessages: Record<string, string> = {
   'auth/email-already-in-use': '이미 사용 중인 이메일입니다',
@@ -37,7 +38,6 @@ export default function SignupPage() {
       setLoading(false)
       return
     }
-
     if (password !== passwordConfirm) {
       setError("비밀번호가 일치하지 않습니다")
       setLoading(false)
@@ -45,14 +45,12 @@ export default function SignupPage() {
     }
 
     const { error: authError } = await signUp(email.trim(), password)
-
     if (authError) {
       const code = (authError as { code?: string })?.code ?? "unknown"
       setError(errorMessages[code] || "회원가입에 실패했습니다")
       setLoading(false)
       return
     }
-
     router.push("/home")
   }
 
@@ -60,39 +58,19 @@ export default function SignupPage() {
     setLoading(true)
     setError(null)
     const { error: authError } = await signInWithGoogle()
-
     if (authError) {
       setError("구글 로그인에 실패했습니다")
       setLoading(false)
       return
     }
-
     router.push("/home")
   }
 
   return (
     <div className="min-h-screen bg-dc-bg flex flex-col">
-
-      {/* 헤더 */}
-      <div className="w-full bg-dc-surface border-b border-dc-border">
-        <div className="flex w-full">
-          <div className="flex-1 bg-dc-side border-r border-dc-border hidden lg:block h-16" />
-          <div className="w-full lg:w-[960px] lg:flex-none h-16 flex items-center px-5 lg:px-10">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-[7px] bg-dc-primary flex items-center justify-center">
-                <span className="text-white text-[11px] font-bold">DC</span>
-              </div>
-              <span className="text-dc-text text-[17px] font-bold">DeliveryCut</span>
-            </Link>
-          </div>
-          <div className="flex-1 bg-dc-side border-l border-dc-border hidden lg:block h-16" />
-        </div>
-      </div>
-
-      {/* 본문 */}
+      <AuthHeader />
       <div className="flex-1 flex w-full">
         <div className="flex-1 bg-dc-side border-r border-dc-border hidden lg:block" />
-
         <div className="w-full lg:w-[960px] lg:flex-none flex items-center justify-center px-5 py-12 lg:py-0">
           <div className="w-full max-w-[480px] bg-dc-surface rounded-2xl border border-dc-border p-8 lg:p-12 flex flex-col gap-6 lg:gap-8">
 
@@ -180,13 +158,10 @@ export default function SignupPage() {
                 로그인
               </Link>
             </div>
-
           </div>
         </div>
-
         <div className="flex-1 bg-dc-side border-l border-dc-border hidden lg:block" />
       </div>
-
     </div>
   )
 }
