@@ -4,9 +4,10 @@ import { useState, useRef, useEffect } from "react"
 import { Refrigerator } from "lucide-react"
 import { NavBar, MobileBottomNav } from "@/components/shared/PageLayout"
 import { onAuthChange } from "@/lib/firebase/auth"
+import { getOrCreateDeviceId } from "@/lib/client/deviceId"
 import { addFridgeItem, updateFridgeItem, deleteFridgeItem, getFridgeItemsByUserId } from "@/lib/firebase/firestore"
 import { unitLabel } from "@/lib/fridge/constants"
-import type { PlannerInput, PlannerResponse, PlannerOutput, PlannerMeal, ApiError, ShoppingItem, FridgeItem } from "@/lib/types/api"
+import type { PlannerInput, PlannerResponse, PlannerOutput, PlannerMeal, ApiError, ShoppingItem, FridgeItem, UsageQuotaResponse } from "@/lib/types/api"
 
 const MEAL_ICONS = ["🌅", "☀️", "🌙"]
 const MEAL_TIMES = ["아침", "점심", "저녁"]
@@ -53,6 +54,7 @@ export default function PlannerPage() {
   const [fridgeItemIds, setFridgeItemIds] = useState<Record<string, string>>({})
   const [fridgeError, setFridgeError] = useState("")
   const [fridgeItems, setFridgeItems] = useState<FridgeItem[]>([])
+  const [quota, setQuota] = useState<UsageQuotaResponse | null>(null)
 
   useEffect(() => {
     const unsub = onAuthChange((u) => setAuthUserId(u?.uid ?? null))
@@ -68,6 +70,19 @@ export default function PlannerPage() {
     getFridgeItemsByUserId(authUserId)
       .then(({ data }) => setFridgeItems(data ?? []))
       .catch(() => setFridgeItems([]))
+  }, [authUserId])
+
+  useEffect(() => {
+    const deviceId = getOrCreateDeviceId()
+    fetch("/api/usage/quota", {
+      headers: {
+        "x-device-id": deviceId,
+        ...(authUserId ? { "x-user-id": authUserId } : {}),
+      },
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: UsageQuotaResponse | null) => setQuota(d))
+      .catch(() => setQuota(null))
   }, [authUserId])
 
   const containsIngredient = (text: string, name: string) => {
@@ -115,9 +130,13 @@ export default function PlannerPage() {
     }
 
     try {
+      const deviceId = getOrCreateDeviceId()
       const res = await fetch("/api/planner", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-device-id": deviceId,
+        },
         body: JSON.stringify(payload),
       })
 
@@ -234,6 +253,12 @@ export default function PlannerPage() {
             <p className="mt-1 text-dc-text-secondary text-sm">
               기간, 하루 끼니 수, 예산, 기피재료를 바탕으로 식단과 통합 장보기를 생성합니다.
             </p>
+            <p className="mt-1 text-dc-primary text-[12px] font-medium">
+              오픈 기간 무료 · quick + planner 합산 하루 10회 생성 가능
+            </p>
+            {quota ? (
+              <p className="mt-1 text-dc-text-secondary text-[12px]">오늘 {quota.usedCount}/{quota.dailyLimit}회 사용</p>
+            ) : null}
           </header>
 
           {/* 입력 영역 */}
@@ -541,3 +566,6 @@ export default function PlannerPage() {
     </div>
   )
 }
+
+
+

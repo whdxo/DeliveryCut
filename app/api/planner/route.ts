@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { generatePlan } from "@/lib/ai/generateMenu"
 import { savePlannerPlan } from "@/lib/firebase"
+import { checkAndConsumeUsageQuota, resolveUsageIdentity } from "@/lib/usage/quota"
 import type { ApiError, PlannerInput, PlannerResponse, StoredPlannerPlan } from "@/lib/types/api"
 
 const jsonError = (status: number, code: string, message: string, details?: unknown) => {
@@ -70,6 +71,16 @@ export async function POST(request: Request) {
 
   const { data: input, error: parseError } = parsePlannerInput(payload)
   if (!input) return jsonError(400, "INVALID_INPUT", parseError ?? "Invalid input")
+
+  const identityResult = resolveUsageIdentity(request, input.userId ?? null)
+  if (!identityResult.identity) {
+    return jsonError(400, identityResult.errorCode ?? "INVALID_IDENTITY", identityResult.message ?? "Failed to resolve identity")
+  }
+
+  const quota = await checkAndConsumeUsageQuota(identityResult.identity, "planner")
+  if (!quota.allowed) {
+    return jsonError(429, "DAILY_LIMIT_EXCEEDED", "오늘 생성 한도(10회)를 모두 사용했어요.", quota)
+  }
 
   try {
     const output = await generatePlan(input)

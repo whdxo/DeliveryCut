@@ -37,6 +37,8 @@ export const collections = {
   fridgeItems: "fridgeItems",
   consumptionLogs: "consumptionLogs",
   foodCatalog: "foodCatalog",
+  usageDaily: "usageDaily",
+  subscriptionWaitlist: "subscriptionWaitlist",
 }
 
 export const setDocument = async (collectionName: string, docId: string, data: any) => {
@@ -555,4 +557,5 @@ export const getUserMenuPlans = async (userId: string) => {
     return { data: null, error: error instanceof Error ? error.message : String(error) }
   }
 }
+
 
