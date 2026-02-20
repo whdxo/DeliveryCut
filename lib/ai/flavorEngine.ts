@@ -128,7 +128,8 @@ const tasteFromSeasonings = (seasonings: SeasoningAmount[]): Taste5 => {
     const taste = PANTRY_TASTE_MAP[canonical] ?? PANTRY_TASTE_MAP[seasoning.name]
     if (!taste) continue
 
-    const weight = Math.max(0.2, seasoning.amount)
+    const unitWeight = { tsp: 5, tbsp: 15, ml: 1, g: 1 }[seasoning.unit] || 1;
+    const weight = Math.max(0.2, seasoning.amount * unitWeight);
     weightSum += weight
 
     total.sweet += taste.sweet * weight
