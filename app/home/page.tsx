@@ -146,6 +146,7 @@ export default function HomePage() {
             <p className="mt-2 text-dc-text-secondary text-sm lg:text-base max-w-[700px] leading-relaxed">
               레시피 추천, 3일 플랜, 냉장고 관리 중 필요한 기능으로 바로 이동할 수 있습니다.
             </p>
+            <p className="mt-2 text-dc-primary text-sm font-semibold">오픈 기간 무료 · quick + planner 합산 하루 10회 생성 가능</p>
           </section>
 
           <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">

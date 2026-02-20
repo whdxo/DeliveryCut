@@ -271,3 +271,16 @@ export interface StoredPlannerPlan {
   createdAt: string
   updatedAt: string
 }
+
+export interface UsageQuotaResponse {
+  dailyLimit: number
+  usedCount: number
+  remainingCount: number
+  dateKey: string
+  isOpenFree: boolean
+}
+
+export interface SubscriptionWaitlistResponse {
+  requestId: string
+  submittedAt: string
+}
