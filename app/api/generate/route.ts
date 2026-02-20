@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { generateMenu } from "@/lib/ai/generateMenu"
 import { validateGenerateInput, validateGenerateOutput } from "@/lib/ai/schema"
-import { saveGeneratedPlan } from "@/lib/firebase"
+import { saveGeneratedPlan, getUserMenuPlans } from "@/lib/firebase"
 import type { ApiError, GenerateResponse, StoredMenuPlan } from "@/lib/types/api"
 
 const jsonError = (status: number, code: string, message: string, details?: unknown) => {
@@ -63,7 +63,16 @@ export async function POST(request: Request) {
   }
 
   try {
-    const output = await generateMenu(inputValidation.data)
+    // [AI-3] userId가 있으면 최근 메뉴 조회해서 중복 추천 방지
+    let recentMenus: string[] = []
+    if (userIdParsing.userId) {
+      const { data: plans } = await getUserMenuPlans(userIdParsing.userId)
+      recentMenus = (plans ?? [])
+        .flatMap((p) => p.output.menuOptions.map((m) => m.title))
+        .slice(0, 6)
+    }
+
+    const output = await generateMenu({ ...inputValidation.data, recentMenus })
     const outputValidation = validateGenerateOutput(output, inputValidation.data)
 
     if (!outputValidation.valid || !outputValidation.data) {
@@ -84,8 +93,8 @@ export async function POST(request: Request) {
       input: inputValidation.data,
       output: outputValidation.data,
       meta: {
-        source: "mock",
-        model: "mock-v1",
+        source: "openai",
+        model: "gpt-4o-mini",
       },
       createdAt: now,
       updatedAt: now,

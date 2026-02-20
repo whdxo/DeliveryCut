@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Clock, Flame, ChevronRight, Refrigerator } from "lucide-react"
 import { NavBar, MobileBottomNav } from "@/components/shared/PageLayout"
@@ -35,7 +35,6 @@ const TIME_MAP: Record<string, 5 | 10 | 15> = {
 const EXPIRY_URGENT_DAYS = 3
 const EXPIRY_WARN_DAYS = 7
 
-// ─── 유통기한 헬퍼 ───────────────────────────────────────────────
 function getDaysLeft(expiresOn: string): number {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -61,14 +60,9 @@ function containsIngredient(source: string, name: string) {
 }
 
 function removeIngredient(source: string, name: string): string {
-  return source
-    .split(",")
-    .map((t) => t.trim())
-    .filter((t) => t !== name.trim())
-    .join(", ")
+  return source.split(",").map((t) => t.trim()).filter((t) => t !== name.trim()).join(", ")
 }
 
-// ─── 서브 컴포넌트 ────────────────────────────────────────────────
 function OptionPill({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <button
@@ -116,8 +110,8 @@ function FridgeChip({ item, added, onToggle }: { item: FridgeItem; added: boolea
   )
 }
 
-// ─── 메인 ─────────────────────────────────────────────────────────
-export default function QuickPage() {
+// ─── useSearchParams 사용하는 내부 컴포넌트 ───────────────────────
+function QuickPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -127,11 +121,10 @@ export default function QuickPage() {
   const [avoidIngredients, setAvoidIngredients] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState("")
-
   const [authUserId, setAuthUserId] = useState<string | null>(null)
   const [fridgeItems, setFridgeItems] = useState<FridgeItem[]>([])
 
-  // ✨ 랜딩 페이지에서 메뉴 이름을 넘겨받으면 재료 입력창에 자동 입력
+  // 랜딩에서 재료 넘어온 경우 자동 입력
   useEffect(() => {
     const menuFromLanding = searchParams.get("menu")
     if (menuFromLanding) {
@@ -231,7 +224,6 @@ export default function QuickPage() {
               <span className="inline-flex h-6 px-2.5 items-center rounded-full bg-dc-primary-light text-dc-primary text-[11px] font-bold tracking-wide">
                 AI 추천
               </span>
-              {/* ✨ 랜딩에서 넘어온 경우 메뉴 이름 표시 */}
               {searchParams.get("menu") && (
                 <span className="inline-flex h-6 px-2.5 items-center rounded-full bg-dc-muted text-dc-text-secondary text-[11px] font-medium">
                   {searchParams.get("menu")} 레시피
@@ -447,5 +439,18 @@ export default function QuickPage() {
 
       <MobileBottomNav />
     </div>
+  )
+}
+
+// ─── Suspense로 감싸서 export ─────────────────────────────────────
+export default function QuickPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-dc-bg flex items-center justify-center">
+        <div className="text-dc-text-secondary text-sm">로딩 중...</div>
+      </div>
+    }>
+      <QuickPageInner />
+    </Suspense>
   )
 }
