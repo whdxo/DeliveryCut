@@ -8,6 +8,7 @@ import { onAuthChange } from "@/lib/firebase"
 import { unitLabel } from "@/lib/fridge/constants"
 import type {
   ApiError,
+  FridgeContextItem,
   FridgeItem,
   FridgeListResponse,
   GenerateInput,
