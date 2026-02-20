@@ -528,9 +528,8 @@ const createBaseSteps = (method: CookingMethod, context: StepContext): Step[] =>
   }
 
   const methodTemplates = templates[method]
-  const randomOffset = Math.floor(Math.random() * methodTemplates.length)
   const keywordSeed = normalizeFoodKey(context.patternKeyword).length
-  const index = (randomOffset + keywordSeed) % methodTemplates.length
+  const index = keywordSeed % methodTemplates.length
   const selected = methodTemplates[index](context)
 
   return selected.map((step, stepIndex) => ({ ...step, n: stepIndex + 1 }))
