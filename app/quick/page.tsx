@@ -211,12 +211,22 @@ export default function QuickPage() {
         daysLeft: item.expiresOn ? getDaysLeft(item.expiresOn) : null,
       }))
 
+    const inventoryContext = fridgeItems
+      .filter((item) => Number.isFinite(item.amount) && item.amount > 0)
+      .map((item) => ({
+        name: item.name,
+        amount: item.amount,
+        unit: item.unit,
+        category: item.category,
+      }))
+
     const payload: GenerateInput = {
       timeLimitMin: TIME_MAP[selectedTime] ?? 10,
       tools: selectedTools.map(toTool),
       ingredientsText: ingredients.trim(),
       ...(avoidIngredients.trim() ? { dislikedIngredientsText: avoidIngredients.trim() } : {}),
       ...(fridgeContext.length > 0 ? { fridgeContext } : {}),
+      ...(inventoryContext.length > 0 ? { inventoryContext } : {}),
     }
 
     try {
@@ -504,5 +514,8 @@ export default function QuickPage() {
     </div>
   )
 }
+
+
+
 
 

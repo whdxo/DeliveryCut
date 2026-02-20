@@ -206,7 +206,12 @@ function ResultContent() {
   }, [result, selectedMenu])
 
   const recipe = selectedData
-    ? { name: selectedData.title, ingredients: selectedData.ingredients, steps: selectedData.steps }
+    ? {
+        name: selectedData.title,
+        ingredients: selectedData.ingredients,
+        steps: selectedData.steps,
+        flavorDesign: selectedData.flavorDesign,
+      }
     : null
 
   const mealPlan = result
@@ -490,5 +495,8 @@ export default function ResultPage() {
     </Suspense>
   )
 }
+
+
+
 
 

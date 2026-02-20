@@ -1,6 +1,8 @@
 export type TimeLimitMin = 5 | 10 | 15
 export type Tool = "microwave" | "pan" | "airfryer" | "pot"
 export type Difficulty = "easy" | "medium" | "hard"
+export type CookingMethod = "stir_fry" | "braise" | "soup" | "salad" | "grill" | "pan_fry" | "microwave"
+export type RecipeHeat = "low" | "medium" | "high"
 
 export interface FridgeContextItem {
   name: string
@@ -16,7 +18,72 @@ export interface GenerateInput {
   dislikedIngredientsText?: string
   userId?: string | null
   fridgeContext?: FridgeContextItem[]
+  inventoryContext?: Array<{
+    name: string
+    amount: number
+    unit: QuantityUnit
+    category?: FridgeCategory
+  }>
   recentMenus?: string[]
+}
+
+export interface Taste5 {
+  sweet: number
+  salty: number
+  sour: number
+  bitter: number
+  umami: number
+}
+
+export interface FlavorScoreBreakdown {
+  availabilityScore: number
+  methodFitScore: number
+  tasteTargetScore: number
+  totalScore: number
+}
+
+export interface FlavorPatternCandidate {
+  id: string
+  keyword: string
+  score: number
+  reason: string
+  scores?: FlavorScoreBreakdown
+}
+
+export interface SeasoningAmount {
+  name: string
+  amount: number
+  unit: "tsp" | "tbsp" | "ml" | "g"
+}
+
+export interface IngredientAmount {
+  name: string
+  amount: number
+  unit: "count" | "g" | "ml" | "tbsp" | "tsp"
+}
+
+export interface Step {
+  n: number
+  text: string
+  heat?: RecipeHeat
+  timerMin?: number
+  why?: string
+}
+
+export interface FlavorDesign {
+  pattern: {
+    id: string
+    keyword: string
+  }
+  method: CookingMethod
+  topCandidates: [FlavorPatternCandidate, FlavorPatternCandidate, FlavorPatternCandidate]
+  seasoningAmounts: SeasoningAmount[]
+  ingredientAmounts?: IngredientAmount[]
+  tasteBalance: Taste5
+  targetTaste?: Taste5
+  scoreBreakdown?: FlavorScoreBreakdown
+  recipeSteps: string[]
+  recipeStepsV2: Step[]
 }
 
 export interface MenuOption {
@@ -29,6 +96,7 @@ export interface MenuOption {
   tip: string
   difficulty?: Difficulty
   kcal?: number
+  flavorDesign?: FlavorDesign
 }
 
 export interface ThreeDayPlanItem {
@@ -160,7 +228,7 @@ export interface FoodSearchResponse {
   items: FoodSearchItem[]
 }
 
-// ─── Planner ─────────────────────────────────────────────────────────────────
+// Planner
 
 export interface PlannerInput {
   days: 3 | 7
@@ -203,4 +271,3 @@ export interface StoredPlannerPlan {
   createdAt: string
   updatedAt: string
 }
-
