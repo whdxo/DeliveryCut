@@ -51,7 +51,7 @@ export default function LandingPage() {
                     href="/home"
                     className="h-[52px] px-7 bg-dc-primary text-white text-[15px] font-bold rounded-xl flex items-center justify-center hover:bg-[#2d6b45] transition-colors"
                   >
-                    지금 바로 시작하기 →
+                    지금 바로 시작하기
                   </Link>
                 </div>
 
@@ -212,4 +212,5 @@ export default function LandingPage() {
     </div>
   )
 }
+
 
