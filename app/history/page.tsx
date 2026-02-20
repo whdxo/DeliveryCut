@@ -4,9 +4,9 @@ import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { onAuthChange } from "@/lib/firebase/auth"
-import { getUserMenuPlans } from "@/lib/firebase/firestore"
+import { getUserMenuPlans, getUserPlannerPlans } from "@/lib/firebase/firestore"
 import { NavBar, MobileBottomNav } from "@/components/shared/PageLayout"
-import type { StoredMenuPlan } from "@/lib/types/api"
+import type { StoredMenuPlan, StoredPlannerPlan } from "@/lib/types/api"
 
 type MainTab = "추천 결과" | "식단 플랜"
 type TimeFilter = "전체" | "5분 이하" | "10분" | "15분"
@@ -16,36 +16,7 @@ const FILTERS: TimeFilter[] = ["전체", "5분 이하", "10분", "15분"]
 // 탭 URL 파라미터 상수 (오타 방지)
 const TAB_PARAM_PLAN = "식단플랜" as const
 
-// ─── 목 플랜 데이터 ───────────────────────────────────────────────
-const MOCK_PLANS = [
-  {
-    id: "mock-1",
-    createdAt: new Date("2026-02-19T10:00:00").toISOString(),
-    days: 3,
-    mealsPerDay: 2,
-    budget: 30000,
-    preview: [
-      { label: "아침", name: "계란 토스트" },
-      { label: "점심", name: "김치볶음밥" },
-    ],
-    shoppingCount: 5,
-    estimatedCost: 28000,
-  },
-  {
-    id: "mock-2",
-    createdAt: new Date("2026-02-18T10:00:00").toISOString(),
-    days: 7,
-    mealsPerDay: 3,
-    budget: 60000,
-    preview: [
-      { label: "아침", name: "그릭요거트" },
-      { label: "점심", name: "참치마요덮밥" },
-      { label: "저녁", name: "두부된장찌개" },
-    ],
-    shoppingCount: 8,
-    estimatedCost: 55000,
-  },
-]
+// ─── 목 플랜 데이터 제거됨 (실제 Firebase 데이터 사용) ───────────
 
 // ─── 날짜 그룹핑 ─────────────────────────────────────────────────
 const toDateLabel = (isoString: string) => {
@@ -106,17 +77,15 @@ function HistoryCard({ plan }: { plan: StoredMenuPlan }) {
 }
 
 // ─── 식단 플랜 카드 ──────────────────────────────────────────────
-function PlanCard({
-  plan,
-  onDelete,
-}: {
-  plan: (typeof MOCK_PLANS)[0]
-  onDelete: (id: string) => void
-}) {
+function PlanCard({ plan }: { plan: StoredPlannerPlan }) {
   const timeStr = new Date(plan.createdAt).toLocaleTimeString("ko-KR", {
     hour: "2-digit",
     minute: "2-digit",
   })
+
+  const day1 = plan.output.dayPlans[0]
+  const mealsPerDay = plan.input.mealsPerDay
+  const preview = day1?.meals.slice(0, mealsPerDay) || []
 
   return (
     <div className="bg-dc-surface rounded-2xl border border-dc-border p-4 flex flex-col gap-3">
@@ -126,52 +95,49 @@ function PlanCard({
             {timeStr}
           </span>
           <span className="text-[11px] text-dc-text-muted">
-            {plan.days}일 · 하루 {plan.mealsPerDay}끼
+            {plan.input.days}일 · 하루 {mealsPerDay}끼
           </span>
         </div>
         <div className="text-dc-text text-[15px] font-bold leading-snug">
-          {plan.days}일 식단 플랜
+          {plan.input.days}일 식단 플랜
         </div>
-        <div className="text-dc-text-muted text-[12px]">
-          예산 {plan.budget.toLocaleString()}원
-        </div>
+        {plan.input.budget && (
+          <div className="text-dc-text-muted text-[12px]">
+            예산 {plan.input.budget.toLocaleString()}원
+          </div>
+        )}
       </div>
 
       {/* Day 1 미리보기 */}
-      <div className="bg-dc-muted rounded-xl p-3 flex flex-col gap-1.5">
-        <span className="text-[11px] font-semibold text-dc-text-muted">Day 1 미리보기</span>
-        {plan.preview.map((meal, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <span className="text-[11px] text-dc-text-muted w-6 flex-none">{meal.label}</span>
-            <span className="text-[13px] text-dc-text font-medium">{meal.name}</span>
-          </div>
-        ))}
-      </div>
+      {preview.length > 0 && (
+        <div className="bg-dc-muted rounded-xl p-3 flex flex-col gap-1.5">
+          <span className="text-[11px] font-semibold text-dc-text-muted">Day 1 미리보기</span>
+          {preview.map((meal, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="text-[11px] text-dc-text-muted w-6 flex-none">
+                {["아침", "점심", "저녁"][i]}
+              </span>
+              <span className="text-[13px] text-dc-text font-medium">{meal.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* 장보기 요약 */}
       <div className="flex items-center text-[12px] text-dc-text-secondary">
-        <span>🛒 장보기 {plan.shoppingCount}가지</span>
+        <span>🛒 장보기 {plan.output.shoppingList.length}가지</span>
         <span className="ml-auto font-semibold text-dc-primary">
-          약 {plan.estimatedCost.toLocaleString()}원
+          약 {plan.output.totalEstimatedCost.toLocaleString()}원
         </span>
       </div>
 
-      {/* 버튼 2개 */}
-      <div className="flex gap-2">
-        <Link
-          href={`/planner/detail?planId=${plan.id}`}
-          className="flex-1 h-11 bg-dc-primary text-white text-[13px] font-semibold rounded-xl hover:bg-[#2d6b45] transition-colors flex items-center justify-center"
-        >
-          자세히 보기
-        </Link>
-        <button
-          type="button"
-          onClick={() => onDelete(plan.id)}
-          className="h-11 px-4 bg-dc-muted text-dc-text-secondary text-[13px] font-semibold rounded-xl hover:bg-dc-border transition-colors"
-        >
-          삭제
-        </button>
-      </div>
+      {/* 버튼 */}
+      <Link
+        href={`/planner/detail?planId=${plan.planId}`}
+        className="w-full h-11 bg-dc-primary text-white text-[13px] font-semibold rounded-xl hover:bg-[#2d6b45] transition-colors flex items-center justify-center"
+      >
+        자세히 보기
+      </Link>
     </div>
   )
 }
@@ -190,7 +156,9 @@ function HistoryContent() {
   const [activeFilter, setActiveFilter] = useState<TimeFilter>("전체")
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [historyError, setHistoryError] = useState<string | null>(null)
-  const [mockPlans, setMockPlans] = useState(MOCK_PLANS)
+  const [plannerPlans, setPlannerPlans] = useState<StoredPlannerPlan[]>([])
+  const [loadingPlans, setLoadingPlans] = useState(true)
+  const [plansError, setPlansError] = useState<string | null>(null)
 
   useEffect(() => {
     const unsubscribe = onAuthChange((user) => {
@@ -222,14 +190,20 @@ function HistoryContent() {
     setLoadingHistory(false)
   }
 
+  const fetchPlannerPlans = async (uid: string) => {
+    setLoadingPlans(true)
+    setPlansError(null)
+    const { data, error } = await getUserPlannerPlans(uid)
+    if (error) setPlansError("플랜 목록을 불러오는데 실패했습니다")
+    else setPlannerPlans(data || [])
+    setLoadingPlans(false)
+  }
+
   useEffect(() => {
     if (!userId) return
     fetchHistory(userId)
+    fetchPlannerPlans(userId)
   }, [userId])
-
-  const handleDeletePlan = (id: string) => {
-    setMockPlans((prev) => prev.filter((p) => p.id !== id))
-  }
 
   // ✅ 필터 로직: timeMin이 timeLimitMin(5/10/15) 기준으로 저장되므로 범위 비교
   const filteredHistory = history.filter((item) => {
@@ -243,7 +217,7 @@ function HistoryContent() {
   })
 
   const groupedHistory = groupByDate(filteredHistory)
-  const groupedPlans = groupByDate(mockPlans)
+  const groupedPlans = groupByDate(plannerPlans)
 
   return (
     <div className="flex w-full min-h-[calc(100vh-3.5rem)] lg:min-h-[calc(100vh-4rem)]">
@@ -344,7 +318,23 @@ function HistoryContent() {
         {/* ── 식단 플랜 탭 ── */}
         {activeTab === "식단 플랜" && (
           <>
-            {mockPlans.length === 0 ? (
+            {loadingPlans && (
+              <div className="flex items-center justify-center py-12 text-dc-text-secondary">
+                로딩 중...
+              </div>
+            )}
+            {!loadingPlans && plansError && (
+              <div className="flex flex-col items-center justify-center py-12 gap-4">
+                <div className="text-dc-text font-semibold">{plansError}</div>
+                <button
+                  onClick={() => userId && fetchPlannerPlans(userId)}
+                  className="h-10 px-4 bg-dc-primary text-white text-sm font-medium rounded-lg hover:bg-[#2d6b45] transition-colors"
+                >
+                  다시 시도
+                </button>
+              </div>
+            )}
+            {!loadingPlans && !plansError && plannerPlans.length === 0 && (
               <div className="flex flex-col items-center justify-center py-12 gap-4">
                 <div className="text-4xl">📅</div>
                 <div className="text-dc-text font-semibold">저장된 식단 플랜이 없어요</div>
@@ -355,7 +345,8 @@ function HistoryContent() {
                   플랜 만들러 가기
                 </Link>
               </div>
-            ) : (
+            )}
+            {!loadingPlans && !plansError && plannerPlans.length > 0 && (
               <div className="flex flex-col gap-6">
                 {Object.entries(groupedPlans).map(([date, plans]) => (
                   <div key={date} className="flex flex-col gap-3">
@@ -364,7 +355,7 @@ function HistoryContent() {
                     </div>
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 lg:gap-4">
                       {plans.map((plan) => (
-                        <PlanCard key={plan.id} plan={plan} onDelete={handleDeletePlan} />
+                        <PlanCard key={plan.planId} plan={plan} />
                       ))}
                     </div>
                   </div>

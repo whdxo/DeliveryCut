@@ -558,4 +558,22 @@ export const getUserMenuPlans = async (userId: string) => {
   }
 }
 
+export const getUserPlannerPlans = async (userId: string) => {
+  try {
+    const q = query(
+      collection(db, collections.plannerPlans),
+      where("userId", "==", userId),
+      orderBy("createdAt", "desc"),
+      limit(10)
+    )
+    const querySnapshot = await getDocs(q)
+    const plannerPlans = querySnapshot.docs.map((docItem) =>
+      docItem.data() as StoredPlannerPlan
+    )
+    return { data: plannerPlans, error: null }
+  } catch (error: unknown) {
+    return { data: null, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
 
