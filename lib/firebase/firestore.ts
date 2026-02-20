@@ -562,14 +562,13 @@ export const getUserPlannerPlans = async (userId: string) => {
   try {
     const q = query(
       collection(db, collections.plannerPlans),
-      where("userId", "==", userId),
-      orderBy("createdAt", "desc"),
-      limit(10)
+      where("userId", "==", userId)
     )
     const querySnapshot = await getDocs(q)
-    const plannerPlans = querySnapshot.docs.map((docItem) =>
-      docItem.data() as StoredPlannerPlan
-    )
+    const plannerPlans = querySnapshot.docs
+      .map((docItem) => docItem.data() as StoredPlannerPlan)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 10)
     return { data: plannerPlans, error: null }
   } catch (error: unknown) {
     return { data: null, error: error instanceof Error ? error.message : String(error) }
