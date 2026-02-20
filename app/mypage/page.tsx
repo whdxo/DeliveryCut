@@ -145,8 +145,8 @@ export default function MyPage() {
       await deleteUser(user)
 
       router.replace("/")
-    } catch (err: any) {
-      const code = err?.code ?? ""
+    } catch (err) {
+      const code = (err as { code?: string })?.code ?? ""
       if (code === "auth/wrong-password" || code === "auth/invalid-credential") {
         setDeleteError("비밀번호가 올바르지 않아요.")
       } else if (code === "auth/popup-closed-by-user") {
