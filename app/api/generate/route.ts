@@ -3,6 +3,7 @@ import { generateMenu } from "@/lib/ai/generateMenu"
 import { validateGenerateInput, validateGenerateOutput } from "@/lib/ai/schema"
 import { finalizeShoppingList } from "@/lib/ai/postprocess"
 import { saveGeneratedPlan, getFridgeItemsByUserId, getUserMenuPlans } from "@/lib/firebase"
+import { checkAndConsumeUsageQuota, resolveUsageIdentity } from "@/lib/usage/quota"
 import type { ApiError, GenerateInput, GenerateResponse, StoredMenuPlan } from "@/lib/types/api"
 
 const jsonError = (status: number, code: string, message: string, details?: unknown) => {
@@ -85,6 +86,16 @@ export async function POST(request: Request) {
   const userIdParsing = parseRequestUserId(payload)
   if (userIdParsing.error) {
     return jsonError(400, "INVALID_INPUT", userIdParsing.error)
+  }
+
+  const identityResult = resolveUsageIdentity(request, userIdParsing.userId)
+  if (!identityResult.identity) {
+    return jsonError(400, identityResult.errorCode ?? "INVALID_IDENTITY", identityResult.message ?? "Failed to resolve identity")
+  }
+
+  const quota = await checkAndConsumeUsageQuota(identityResult.identity, "quick")
+  if (!quota.allowed) {
+    return jsonError(429, "DAILY_LIMIT_EXCEEDED", "오늘 생성 한도(10회)를 모두 사용했어요.", quota)
   }
 
   const inputValidation = validateGenerateInput(payload)

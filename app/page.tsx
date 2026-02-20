@@ -40,7 +40,8 @@ export default function LandingPage() {
         <div className="flex w-full">
           <div className="flex-1 bg-dc-side border-r border-dc-border hidden lg:block" />
           <div className="w-full lg:w-[960px] lg:flex-none px-5 lg:px-12 py-12 lg:py-20">
-            <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 items-start">
+            <div className="flex flex-col md:flex-row gap-8 md:gap-10 lg:gap-12 items-start">
+              {/* Left */}
               <div className="flex-1 flex flex-col gap-6 lg:gap-7">
                 <div className="inline-flex">
                   <span className="bg-dc-primary-light text-dc-primary text-xs font-medium px-3.5 py-1.5 rounded-full">
@@ -58,12 +59,20 @@ export default function LandingPage() {
                   있는 재료 입력하면 AI가 딱 맞는 메뉴를 추천해드려요.<br className="hidden lg:block" />
                   시간, 도구, 기피 재료까지 고려한 맞춤 레시피.
                 </p>
-                <Link
-                  href="/home"
-                  className="h-[52px] px-7 bg-dc-primary text-white text-[15px] font-bold rounded-xl flex items-center justify-center hover:bg-[#2d6b45] transition-colors w-fit"
-                >
-                  지금 바로 시작하기 →
-                </Link>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Link
+                    href="/home"
+                    className="h-[52px] px-7 bg-dc-primary text-white text-[15px] font-bold rounded-xl flex items-center justify-center hover:bg-[#2d6b45] transition-colors"
+                  >
+                    지금 바로 시작하기
+                  </Link>
+                  <Link
+                    href="/subscription"
+                    className="h-[52px] px-7 bg-dc-surface text-dc-primary text-[15px] font-bold rounded-xl flex items-center justify-center hover:bg-dc-primary-light transition-colors"
+                  >
+                    구독 안내
+                  </Link>
+                </div>
                 <div className="flex gap-8 pt-2">
                   <div>
                     <div className="text-dc-text text-xl font-bold">5분~</div>
@@ -75,13 +84,13 @@ export default function LandingPage() {
                   </div>
                   <div>
                     <div className="text-dc-text text-xl font-bold">무료</div>
-                    <div className="text-dc-text-muted text-xs mt-0.5">완전 무료로 이용해요</div>
+                    <div className="text-dc-text-muted text-xs mt-0.5">하루 10회까지 무료 제공</div>
                   </div>
                 </div>
               </div>
 
-              {/* 제철 메뉴 카드 */}
-              <div className="hidden lg:block w-[380px] flex-none">
+              {/* Right: 제철 메뉴 카드 */}
+              <div className="w-full md:w-[340px] lg:w-[380px] md:flex-none">
                 <div className="bg-dc-surface rounded-2xl p-5 border border-dc-border shadow-sm">
                   <div className="flex items-center justify-between mb-3">
                     <div className="text-dc-text-muted text-xs font-medium">이달의 제철 메뉴 ✦</div>
@@ -159,7 +168,7 @@ export default function LandingPage() {
                 오늘 저녁, 뭐 먹을지 고민 끝! 🍽
               </h2>
               <p className="text-dc-primary-light text-sm lg:text-base">
-                지금 바로 냉장고 재료를 입력해보세요. 완전 무료예요.
+                현재 오픈 기간으로 모든 구독 기능을 무료 제공 중입니다.
               </p>
               <Link
                 href="/home"
@@ -195,3 +204,4 @@ export default function LandingPage() {
     </div>
   )
 }
+

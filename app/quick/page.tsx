@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { Clock, Flame, ChevronRight, Refrigerator } from "lucide-react"
 import { NavBar, MobileBottomNav } from "@/components/shared/PageLayout"
 import { onAuthChange } from "@/lib/firebase"
+import { getOrCreateDeviceId } from "@/lib/client/deviceId"
 import { unitLabel } from "@/lib/fridge/constants"
 import type {
   ApiError,
@@ -15,6 +16,7 @@ import type {
   GenerateResponse,
   ResultResponse,
   Tool,
+  UsageQuotaResponse,
 } from "@/lib/types/api"
 
 // ─── 상수 ────────────────────────────────────────────────────────
@@ -125,6 +127,7 @@ function QuickPageInner() {
   const [error, setError] = useState("")
   const [authUserId, setAuthUserId] = useState<string | null>(null)
   const [fridgeItems, setFridgeItems] = useState<FridgeItem[]>([])
+  const [quota, setQuota] = useState<UsageQuotaResponse | null>(null)
 
   // 랜딩에서 재료 넘어온 경우 자동 입력
   useEffect(() => {
@@ -145,6 +148,19 @@ function QuickPageInner() {
       .then((r) => r.ok ? r.json() : null)
       .then((d: FridgeListResponse | null) => setFridgeItems(d?.items ?? []))
       .catch(() => setFridgeItems([]))
+  }, [authUserId])
+
+  useEffect(() => {
+    const deviceId = getOrCreateDeviceId()
+    fetch("/api/usage/quota", {
+      headers: {
+        "x-device-id": deviceId,
+        ...(authUserId ? { "x-user-id": authUserId } : {}),
+      },
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: UsageQuotaResponse | null) => setQuota(d))
+      .catch(() => setQuota(null))
   }, [authUserId])
 
   const sortedFridge = [...fridgeItems].sort((a, b) => {
@@ -204,9 +220,13 @@ function QuickPageInner() {
     }
 
     try {
+      const deviceId = getOrCreateDeviceId()
       const res = await fetch("/api/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-device-id": deviceId,
+        },
         body: JSON.stringify({ ...payload, userId: authUserId }),
       })
       const data = (await res.json()) as GenerateResponse | ApiError
@@ -248,6 +268,11 @@ function QuickPageInner() {
               <span className="inline-flex h-6 px-2.5 items-center rounded-full bg-dc-primary-light text-dc-primary text-[11px] font-bold tracking-wide">
                 AI 추천
               </span>
+              {quota && (
+                <span className="inline-flex h-6 px-2.5 items-center rounded-full bg-dc-muted text-dc-text-secondary text-[11px] font-medium">
+                  오늘 {quota.usedCount}/{quota.dailyLimit}회
+                </span>
+              )}
               {searchParams.get("menu") && (
                 <span className="inline-flex h-6 px-2.5 items-center rounded-full bg-dc-muted text-dc-text-secondary text-[11px] font-medium">
                   {searchParams.get("menu")} 레시피
@@ -259,6 +284,9 @@ function QuickPageInner() {
             </h1>
             <p className="text-dc-text-secondary text-[13px] lg:text-sm">
               재료와 조건을 입력하면 AI가 딱 맞는 메뉴 3개를 추천해요
+            </p>
+            <p className="text-dc-primary text-[12px] lg:text-[13px] font-medium">
+              오픈 기간 무료 · quick + planner 합산 하루 10회 생성 가능
             </p>
           </header>
 
@@ -478,3 +506,4 @@ export default function QuickPage() {
     </Suspense>
   )
 }
+
