@@ -18,12 +18,13 @@ import type {
 
 // ─── 상수 ────────────────────────────────────────────────────────
 const TIME_OPTIONS = ["5분", "10분", "15분"]
-const TOOL_OPTIONS = ["전자레인지", "팬", "에어프라이어"]
+const TOOL_OPTIONS = ["전자레인지", "팬", "에어프라이어", "냄비"]
 function toTool(tool: string): Tool {
   switch (tool) {
     case "전자레인지": return "microwave"
     case "팬": return "pan"
     case "에어프라이어": return "airfryer"
+    case "냄비": return "pot"
     default: throw new Error(`Unknown tool: ${tool}`)
   }
 }
@@ -172,11 +173,33 @@ function QuickPageInner() {
     setIsSubmitting(true)
     setError("")
 
+    // 입력된 재료명과 냉장고 아이템을 매칭해서 fridgeContext 생성
+    const inputNames = ingredients.split(",").map((s) => s.trim().toLowerCase())
+    const fridgeContext: FridgeContextItem[] = fridgeItems
+      .filter((item) => inputNames.some((n) => item.name.toLowerCase().includes(n) || n.includes(item.name.toLowerCase())))
+      .map((item) => ({
+        name: item.name,
+        amount: item.amount,
+        unit: item.unit,
+        daysLeft: item.expiresOn ? getDaysLeft(item.expiresOn) : null,
+      }))
+
+    const inventoryContext = fridgeItems
+      .filter((item) => Number.isFinite(item.amount) && item.amount > 0)
+      .map((item) => ({
+        name: item.name,
+        amount: item.amount,
+        unit: item.unit,
+        category: item.category,
+      }))
+
     const payload: GenerateInput = {
       timeLimitMin: TIME_MAP[selectedTime] ?? 10,
       tools: selectedTools.map(toTool),
       ingredientsText: ingredients.trim(),
       ...(avoidIngredients.trim() ? { dislikedIngredientsText: avoidIngredients.trim() } : {}),
+      ...(fridgeContext.length > 0 ? { fridgeContext } : {}),
+      ...(inventoryContext.length > 0 ? { inventoryContext } : {}),
     }
 
     try {
