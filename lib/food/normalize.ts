@@ -89,5 +89,5 @@ export const foodNameIncludes = (target: string, query: string): boolean => {
   const tk = normalizeFoodKey(canonicalizeFoodName(target))
   const qk = normalizeFoodKey(canonicalizeFoodName(query))
   if (!tk || !qk) return false
-  return tk === qk
+  return tk.includes(qk)
 }
