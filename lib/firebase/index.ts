@@ -26,5 +26,6 @@ export {
   getUserMenuPlans,
   savePlannerPlan,
   getPlannerPlan,
+  getUserPlannerPlans,
 } from "./firestore"
 

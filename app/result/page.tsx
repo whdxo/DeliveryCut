@@ -236,10 +236,15 @@ function ResultContent() {
 
     if (!result || !selectedData) return
 
+    console.log("[차감] 냉장고 아이템 수:", fridgeItems.length)
+    console.log("[차감] 장보기 리스트:", result.output.shoppingList)
+    console.log("[차감] 레시피 재료:", selectedData.ingredients)
+
     const byItemId = new Map<string, { itemId: string; name: string; amount: number; unit: QuantityUnit }>()
 
     for (const shoppingItem of result.output.shoppingList) {
       const matched = findBestFridgeMatch(shoppingItem.item, fridgeItems)
+      console.log(`[매칭] "${shoppingItem.item}" → ${matched ? matched.name : "없음"}`)
       if (!matched) continue
 
       byItemId.set(matched.id, {
@@ -252,6 +257,7 @@ function ResultContent() {
 
     for (const ingredientName of selectedData.ingredients) {
       const matched = findBestFridgeMatch(ingredientName, fridgeItems)
+      console.log(`[매칭] "${ingredientName}" → ${matched ? matched.name : "없음"}`)
       if (!matched || byItemId.has(matched.id)) continue
 
       byItemId.set(matched.id, {
@@ -263,6 +269,7 @@ function ResultContent() {
     }
 
     const rows = [...byItemId.values()]
+    console.log("[차감] 최종 차감 목록:", rows)
     setConsumeDraft(rows)
     setConsumeError(rows.length === 0 ? "차감할 재료를 찾지 못했습니다. 냉장고 이름과 식재료 이름을 확인해주세요." : null)
     setConsumeSuccess(null)
