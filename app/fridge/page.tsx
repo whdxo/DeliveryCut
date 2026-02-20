@@ -356,6 +356,23 @@ export default function FridgePage() {
     return base.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
   }, [items, activeCategory, sortBy])
 
+
+  const quickSuggestionsByCategory = useMemo(() => {
+    const result = {} as Record<FridgeCategory, string[]>
+
+    CATEGORIES.forEach((cat) => {
+      const base = INGREDIENT_SUGGESTIONS[cat.id] ?? []
+      if (cat.id === "seasoning") {
+        const merged = [...BASIC_PANTRY_ITEMS.map((item) => item.name), ...base]
+        result[cat.id] = Array.from(new Set(merged))
+        return
+      }
+      result[cat.id] = base
+    })
+
+    return result
+  }, [])
+
   return (
     <div className="min-h-screen bg-dc-bg">
       <div className="sticky top-0 z-50 w-full border-b border-dc-border bg-dc-surface">
@@ -545,19 +562,6 @@ export default function FridgePage() {
 
           {activeCategory === "all" && (
             <section className="mt-6 bg-dc-surface rounded-2xl border border-dc-border p-5">
-              <h3 className="text-dc-text text-[15px] font-bold mb-3">기본 조미료 빠른 등록</h3>
-              <div className="flex flex-wrap gap-2 mb-4">
-                {BASIC_PANTRY_ITEMS.map((item) => (
-                  <button
-                    key={item.name}
-                    onClick={() => handleQuickAdd(item.name, "seasoning")}
-                    className="h-9 px-3 bg-dc-muted text-dc-text-secondary text-[12px] font-medium rounded-full hover:bg-dc-primary hover:text-white transition-colors"
-                  >
-                    + {item.name}
-                  </button>
-                ))}
-              </div>
-
               <h3 className="text-dc-text text-[15px] font-bold mb-3">카테고리별 빠른 추가</h3>
               <div className="space-y-3">
                 {CATEGORIES.map((cat) => (
@@ -567,7 +571,7 @@ export default function FridgePage() {
                       {cat.label}
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {(INGREDIENT_SUGGESTIONS[cat.id] ?? []).slice(0, 5).map((name) => (
+                      {(quickSuggestionsByCategory[cat.id] ?? []).slice(0, 5).map((name) => (
                         <button
                           key={name}
                           onClick={() => handleQuickAdd(name, cat.id)}
